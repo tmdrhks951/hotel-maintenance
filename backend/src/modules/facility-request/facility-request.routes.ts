@@ -12,6 +12,7 @@ import {
   qcReviewHandler,
   updateScheduleHandler,
   assignWorkerHandler,
+  completeWorkHandler,
 } from './facility-request.controller';
 
 const router = Router();
@@ -58,5 +59,20 @@ router.patch('/:id/schedule', authorize(Role.QC, Role.ADMIN), updateScheduleHand
 
 // PATCH /facility-requests/:id/assign  (STEP 6 — QC/ADMIN)
 router.patch('/:id/assign', authorize(Role.QC, Role.ADMIN), assignWorkerHandler);
+
+// POST /facility-requests/:id/complete  (STEP 7 — QC/ADMIN, multipart/form-data)
+router.post(
+  '/:id/complete',
+  authorize(Role.QC, Role.ADMIN),
+  (req: Request, res: Response, next: NextFunction) => {
+    imageUpload.single('image')(req, res, (err) => {
+      if (err) {
+        return next(new AppError(err.message ?? '파일 업로드 오류', 400, true, 'UPLOAD_ERROR'));
+      }
+      next();
+    });
+  },
+  completeWorkHandler,
+);
 
 export default router;

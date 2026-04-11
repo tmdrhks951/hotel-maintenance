@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { RequestCategory } from '@prisma/client';
 import { AppError } from '@/common/errors/AppError';
 import * as facilityRequestService from './facility-request.service';
-import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto } from './facility-request.dto';
+import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto } from './facility-request.dto';
 
 // ================================================================
 // GET /api/v1/facility-requests/duplicate-check
@@ -231,6 +231,57 @@ export async function updateScheduleHandler(
       user.role,
       user.branchId,
       dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// POST /api/v1/facility-requests/:id/complete  (STEP 7)
+// ================================================================
+
+export async function completeWorkHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const { workAction, workItem, generatedText, note } = req.body as {
+      workAction?: string;
+      workItem?: string;
+      generatedText?: string;
+      note?: string;
+    };
+
+    if (!workAction || !workItem || !generatedText) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'workAction, workItem, generatedText는 필수입니다',
+        },
+      });
+      return;
+    }
+
+    const dto: CompleteWorkDto = { workAction, workItem, generatedText, note };
+
+    const result = await facilityRequestService.completeWork(
+      req.params.id,
+      user.id,
+      user.role,
+      user.branchId,
+      dto,
+      req.file,
     );
 
     res.status(200).json({ success: true, data: result });

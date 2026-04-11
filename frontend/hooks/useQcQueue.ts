@@ -8,6 +8,7 @@ import type {
   AssignableUser,
 } from '@/types';
 
+
 // ================================================================
 // QC 작업 큐 조회
 // ================================================================
@@ -121,5 +122,26 @@ export function useAssignableUsers(branchId: string | null | undefined) {
       return data.data;
     },
     enabled: !!branchId,
+  });
+}
+
+// ================================================================
+// STEP 7: 작업 완료 등록
+// ================================================================
+
+export function useCompleteWork(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (formData: FormData) => {
+      const { data } = await apiClient.post<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/complete`,
+        formData,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.setQueryData(['facility-request', requestId], updated);
+    },
   });
 }

@@ -22,11 +22,18 @@ export interface DuplicateCheckQuery {
 // ================================================================
 
 /**
- * MARK_REVIEW : PENDING/REQUESTED → REVIEW_REQUIRED
- * RECEIVE     : PENDING/REQUESTED/REVIEW_REQUIRED → RECEIVED
- * CANCEL      : 모든 비종료 상태 → CANCELLED
+ * MARK_REVIEW        : PENDING/REQUESTED → REVIEW_REQUIRED
+ * RECEIVE            : PENDING/REQUESTED/REVIEW_REQUIRED → RECEIVED
+ * CANCEL             : 모든 비종료 상태 → CANCELLED
+ * REVERT_TO_REQUESTED: REVIEW_REQUIRED/RECEIVED → REQUESTED
+ * START_WORK         : RECEIVED/SCHEDULED → IN_PROGRESS
  */
-export type QcReviewAction = 'MARK_REVIEW' | 'RECEIVE' | 'CANCEL';
+export type QcReviewAction =
+  | 'MARK_REVIEW'
+  | 'RECEIVE'
+  | 'CANCEL'
+  | 'REVERT_TO_REQUESTED'
+  | 'START_WORK';
 
 export interface QcReviewDto {
   /// 상태 전이 액션 (없으면 emergency/priority만 업데이트)
@@ -55,4 +62,19 @@ export interface UpdateScheduleDto {
 
 export interface AssignWorkerDto {
   assignedToId: string;
+}
+
+// ================================================================
+// STEP 7 DTOs — 작업 완료 등록
+// ================================================================
+
+export interface CompleteWorkDto {
+  /// 1차 작업 유형 (수리/교체/점검/임시조치/외주/보류)
+  workAction: string;
+  /// 2차 작업 항목
+  workItem: string;
+  /// 자동 생성된 완료 문구
+  generatedText: string;
+  /// 추가 메모 (선택)
+  note?: string;
 }

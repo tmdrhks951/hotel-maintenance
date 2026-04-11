@@ -6,6 +6,7 @@ import type {
   QcReviewDto,
   UpdateScheduleDto,
   AssignWorkerDto,
+  CompleteWorkDto,
 } from './facility-request.dto';
 
 // ================================================================
@@ -112,6 +113,7 @@ const REQUEST_DETAIL_SELECT = {
   locationId: true,
   assignedToId: true,
   completedAt: true,
+  completedById: true,
   createdAt: true,
   updatedAt: true,
   branch: { select: { id: true, name: true, code: true } },
@@ -119,6 +121,7 @@ const REQUEST_DETAIL_SELECT = {
   createdBy: { select: { id: true, name: true, role: true } },
   assignedTo: { select: { id: true, name: true, role: true } },
   emergencySetBy: { select: { id: true, name: true } },
+  completedBy: { select: { id: true, name: true } },
   media: {
     select: { id: true, url: true, filename: true, phase: true, type: true },
     orderBy: { createdAt: 'asc' as const },
@@ -394,6 +397,7 @@ export async function qcReview(
   else if (dto.action === 'RECEIVE') newStatus = 'RECEIVED';
   else if (dto.action === 'CANCEL') newStatus = 'CANCELLED';
   else if (dto.action === 'REVERT_TO_REQUESTED') newStatus = 'REQUESTED';
+  else if (dto.action === 'START_WORK') newStatus = 'IN_PROGRESS';
 
   if (newStatus) assertValidTransition(request.status, newStatus);
 
@@ -582,6 +586,91 @@ export async function assignWorker(
     where: { id: requestId },
     data: { assignedToId: dto.assignedToId },
     select: REQUEST_DETAIL_SELECT,
+  });
+
+  return updated;
+}
+
+// ================================================================
+// STEP 7: completeWork — 작업 완료 등록 (IN_PROGRESS → DONE_BY_QC)
+// ================================================================
+
+export async function completeWork(
+  requestId: string,
+  userId: string,
+  role: string,
+  userBranchId: string | null,
+  dto: CompleteWorkDto,
+  file?: Express.Multer.File,
+) {
+  assertQcAccess(role);
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, status: true, branchId: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  if (request.status !== 'IN_PROGRESS') {
+    throw new AppError(
+      '작업 진행 중 상태에서만 완료 등록이 가능합니다',
+      400,
+      true,
+      'INVALID_STATUS',
+    );
+  }
+
+  if (!file) {
+    throw new AppError('완료 사진을 첨부해주세요', 400, true, 'PHOTO_REQUIRED');
+  }
+
+  const completionReason = dto.note?.trim()
+    ? `${dto.generatedText} — ${dto.note.trim()}`
+    : dto.generatedText;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const serverBaseUrl = process.env.SERVER_BASE_URL ?? 'http://localhost:4000';
+
+    // AFTER 사진 저장
+    await tx.media.create({
+      data: {
+        type: 'IMAGE',
+        phase: 'AFTER',
+        url: `${serverBaseUrl}/uploads/${file.filename}`,
+        filename: file.originalname,
+        size: file.size,
+        requestId,
+        uploadedById: userId,
+      },
+    });
+
+    // 상태 전이 + 완료 정보 기록
+    const req = await tx.facilityRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'DONE_BY_QC',
+        completedAt: new Date(),
+        completedById: userId,
+      },
+      select: REQUEST_DETAIL_SELECT,
+    });
+
+    await tx.statusLog.create({
+      data: {
+        requestId,
+        fromStatus: 'IN_PROGRESS',
+        toStatus: 'DONE_BY_QC',
+        reason: completionReason,
+        changedById: userId,
+      },
+    });
+
+    return req;
   });
 
   return updated;

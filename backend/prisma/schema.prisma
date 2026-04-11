@@ -109,6 +109,8 @@ model User {
   assignedRequests  FacilityRequest[]  @relation("RequestAssignedTo")
   /// STEP 6: 긴급 전환 처리자
   emergencyRequests FacilityRequest[]  @relation("RequestEmergencySetBy")
+  /// STEP 7: 작업 완료 처리자
+  completedRequests FacilityRequest[]  @relation("RequestCompletedBy")
   /// STEP 6: 상태 변경 이력
   statusLogs        StatusLog[]
   comments          Comment[]
@@ -244,6 +246,10 @@ model FacilityRequest {
   /// 담당 배정자 (QC). 배정 전 null.
   assignedToId String?
   assignedTo   User?   @relation("RequestAssignedTo", fields: [assignedToId], references: [id])
+
+  /// STEP 7: 작업 완료 처리자
+  completedById String?
+  completedBy   User?     @relation("RequestCompletedBy", fields: [completedById], references: [id])
 
   completedAt DateTime?
 

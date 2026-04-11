@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import {
   useQcQueue,
@@ -9,18 +9,47 @@ import {
   useUpdateSchedule,
   useAssignWorker,
   useAssignableUsers,
+  useCompleteWork,
 } from '@/hooks/useQcQueue';
 import type {
   FacilityRequestCard,
   FacilityRequestDetail,
   Priority,
   QcReviewAction,
+  WorkAction,
 } from '@/types';
 import {
   REQUEST_CATEGORY_LABEL,
   REQUEST_STATUS_LABEL,
   PRIORITY_LABEL,
+  WORK_ACTIONS,
+  WORK_ACTION_ITEMS,
+  generateCompletionText,
 } from '@/types';
+
+// ================================================================
+// localStorage 최근 문구 유틸
+// ================================================================
+
+const RECENT_KEY = 'hotel_recent_work_phrases';
+const MAX_RECENT = 5;
+
+function loadRecentPhrases(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentPhrase(phrase: string) {
+  if (typeof window === 'undefined') return;
+  const phrases = loadRecentPhrases().filter((p) => p !== phrase);
+  phrases.unshift(phrase);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(phrases.slice(0, MAX_RECENT)));
+}
 
 // ================================================================
 // 우선순위 뱃지 색상
@@ -180,6 +209,223 @@ function StatusLogList({ logs }: { logs: FacilityRequestDetail['statusLogs'] }) 
 }
 
 // ================================================================
+// STEP 7: 작업 완료 등록 폼
+// ================================================================
+
+function CompletionForm({
+  req,
+  requestId,
+  onClose,
+  onBack,
+}: {
+  req: FacilityRequestDetail;
+  requestId: string;
+  onClose: () => void;
+  onBack: () => void;
+}) {
+  const completeMutation = useCompleteWork(requestId);
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [workAction, setWorkAction] = useState<WorkAction | null>(null);
+  const [workItem, setWorkItem] = useState('');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState('');
+  const [recentPhrases, setRecentPhrases] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setRecentPhrases(loadRecentPhrases());
+  }, []);
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    const url = URL.createObjectURL(file);
+    setPhotoPreview(url);
+  }
+
+  const actionItems =
+    workAction ? (WORK_ACTION_ITEMS[workAction][req.category] ?? WORK_ACTION_ITEMS[workAction]['OTHER'] ?? []) : [];
+
+  const generatedText =
+    workAction && workItem
+      ? generateCompletionText(req.category, workAction, workItem)
+      : '';
+
+  async function handleSubmit() {
+    if (!photoFile) { setError('완료 사진을 첨부해주세요'); return; }
+    if (!workAction) { setError('작업 유형을 선택해주세요'); return; }
+    if (!workItem) { setError('작업 항목을 선택해주세요'); return; }
+
+    setError('');
+    const fd = new FormData();
+    fd.append('image', photoFile);
+    fd.append('workAction', workAction);
+    fd.append('workItem', workItem);
+    fd.append('generatedText', generatedText);
+    if (note.trim()) fd.append('note', note.trim());
+
+    try {
+      await completeMutation.mutateAsync(fd);
+      saveRecentPhrase(note.trim() || generatedText);
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '등록 실패');
+    }
+  }
+
+  return (
+    <div className="p-5 space-y-5">
+      {/* 헤더 */}
+      <div className="flex items-center gap-2">
+        <button onClick={onBack} className="text-gray-400 hover:text-gray-600 text-sm">
+          ←
+        </button>
+        <h4 className="text-sm font-semibold text-gray-900">작업 완료 등록</h4>
+        <span className="ml-auto text-xs text-gray-400 truncate max-w-32">{req.title}</span>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* 완료 사진 */}
+      <section>
+        <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          완료 사진 <span className="text-red-500">*</span>
+        </h5>
+        {photoPreview ? (
+          <div className="relative">
+            <img
+              src={photoPreview}
+              alt="완료 사진"
+              className="w-full rounded-lg object-cover max-h-48"
+            />
+            <button
+              onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+              className="absolute top-2 right-2 bg-black/50 text-white text-xs rounded px-2 py-1"
+            >
+              다시 찍기
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full h-32 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-1 hover:border-blue-400 transition-colors"
+          >
+            <span className="text-2xl">📷</span>
+            <span className="text-xs text-gray-500">사진 촬영 / 선택</span>
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoChange}
+          className="hidden"
+        />
+      </section>
+
+      {/* 1차: 작업 유형 */}
+      <section>
+        <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          작업 유형 <span className="text-red-500">*</span>
+        </h5>
+        <div className="grid grid-cols-3 gap-2">
+          {WORK_ACTIONS.map((action) => (
+            <button
+              key={action}
+              onClick={() => { setWorkAction(action); setWorkItem(''); }}
+              className={`py-2 text-sm rounded border transition-colors ${
+                workAction === action
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* 2차: 작업 항목 */}
+      {workAction && actionItems.length > 0 && (
+        <section>
+          <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            작업 항목 <span className="text-red-500">*</span>
+          </h5>
+          <div className="flex flex-wrap gap-2">
+            {actionItems.map((item) => (
+              <button
+                key={item}
+                onClick={() => setWorkItem(item)}
+                className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
+                  workItem === item
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 자동 생성 문구 */}
+      {generatedText && (
+        <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2">
+          <p className="text-xs text-blue-500 mb-0.5">완료 문구</p>
+          <p className="text-sm font-medium text-blue-800">{generatedText}</p>
+        </div>
+      )}
+
+      {/* 추가 메모 */}
+      <section>
+        <h5 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          추가 메모 (선택)
+        </h5>
+        <input
+          type="text"
+          placeholder="추가 내용 입력"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+        />
+        {/* 최근 문구 */}
+        {recentPhrases.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {recentPhrases.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => setNote(p)}
+                className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 truncate max-w-40"
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 제출 */}
+      <button
+        onClick={handleSubmit}
+        disabled={completeMutation.isPending || !photoFile || !workAction || !workItem}
+        className="w-full py-3 text-sm font-medium rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {completeMutation.isPending ? '등록 중...' : '완료 등록'}
+      </button>
+    </div>
+  );
+}
+
+// ================================================================
 // 요청 상세 모달
 // ================================================================
 
@@ -197,6 +443,9 @@ function RequestDetailModal({
 
   // 담당자 후보 — req가 로드된 후 branchId로 조회
   const { data: assignableUsers = [] } = useAssignableUsers(req?.branchId);
+
+  // 완료 등록 폼 표시 여부
+  const [isCompleting, setIsCompleting] = useState(false);
 
   // 로컬 폼 상태
   const [isEmergency, setIsEmergency] = useState<boolean | undefined>(undefined);
@@ -251,7 +500,7 @@ function RequestDetailModal({
     }
   }
 
-  // 상태 전이 (판단 필요 / 수령)
+  // 상태 전이 (판단 필요 / 수령 / 되돌리기 / 작업 시작)
   async function handleAction(action: QcReviewAction) {
     setError('');
     try {
@@ -260,6 +509,7 @@ function RequestDetailModal({
         action === 'MARK_REVIEW' ? '판단 필요로 이동했습니다' :
         action === 'RECEIVE' ? '수령 처리됐습니다' :
         action === 'REVERT_TO_REQUESTED' ? '신규 요청으로 되돌렸습니다' :
+        action === 'START_WORK' ? '작업을 시작했습니다' :
         '처리됐습니다',
       );
     } catch (e: unknown) {
@@ -347,14 +597,34 @@ function RequestDetailModal({
       );
     }
 
-    if (s === 'RECEIVED') {
+    if (s === 'RECEIVED' || s === 'SCHEDULED') {
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleAction('REVERT_TO_REQUESTED')}
+            disabled={reviewMutation.isPending}
+            className="py-2 px-3 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            ← 되돌리기
+          </button>
+          <button
+            onClick={() => handleAction('START_WORK')}
+            disabled={reviewMutation.isPending}
+            className="flex-1 py-2 text-sm rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            작업 시작
+          </button>
+        </div>
+      );
+    }
+
+    if (s === 'IN_PROGRESS') {
       return (
         <button
-          onClick={() => handleAction('REVERT_TO_REQUESTED')}
-          disabled={reviewMutation.isPending}
-          className="w-full py-2 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          onClick={() => setIsCompleting(true)}
+          className="w-full py-2.5 text-sm font-medium rounded bg-green-600 text-white hover:bg-green-700"
         >
-          ← 신규 요청으로 되돌리기
+          작업 완료 등록
         </button>
       );
     }
@@ -386,7 +656,18 @@ function RequestDetailModal({
           <div className="p-8 text-center text-sm text-gray-400">불러오는 중...</div>
         )}
 
-        {req && (
+        {/* 완료 등록 폼 */}
+        {req && isCompleting && (
+          <CompletionForm
+            req={req}
+            requestId={requestId}
+            onClose={onClose}
+            onBack={() => setIsCompleting(false)}
+          />
+        )}
+
+        {/* 일반 상세 뷰 */}
+        {req && !isCompleting && (
           <div className="p-5 space-y-5">
             {/* 피드백 */}
             {error && (
@@ -427,6 +708,27 @@ function RequestDetailModal({
                   className="mt-2 w-full rounded-lg object-cover max-h-48"
                 />
               ))}
+              {/* AFTER 사진 (완료 후) */}
+              {req.media.filter((m) => m.phase === 'AFTER').length > 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-gray-400 mb-1">완료 사진</p>
+                  {req.media.filter((m) => m.phase === 'AFTER').map((m) => (
+                    <img
+                      key={m.id}
+                      src={m.url}
+                      alt="AFTER"
+                      className="w-full rounded-lg object-cover max-h-48 border-2 border-green-200"
+                    />
+                  ))}
+                </div>
+              )}
+              {/* 완료 정보 */}
+              {req.completedAt && (
+                <div className="mt-2 text-xs text-green-700 bg-green-50 rounded px-2 py-1">
+                  완료: {new Date(req.completedAt).toLocaleString('ko-KR')}
+                  {req.completedBy && <span className="ml-1">({req.completedBy.name})</span>}
+                </div>
+              )}
             </section>
 
             <hr className="border-gray-100" />
