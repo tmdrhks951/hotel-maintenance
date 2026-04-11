@@ -309,7 +309,9 @@ export function generateCompletionText(
   const catLabel = REQUEST_CATEGORY_LABEL[category];
   if (action === '보류') return `[보류] ${catLabel} ${item}`;
   if (action === '외주') return `[외주] ${catLabel} ${item}`;
-  return `${catLabel} ${item} ${action} 완료`;
+  // item이 이미 카테고리명으로 시작하면 prefix 생략 (e.g. "기타 수리" → catLabel "기타")
+  const prefix = item.startsWith(catLabel) ? '' : `${catLabel} `;
+  return `${prefix}${item} 완료`;
 }
 
 // STEP 7: 완료 등록 body (FormData로 전송)

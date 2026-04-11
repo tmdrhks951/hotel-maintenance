@@ -261,7 +261,9 @@ function CompletionForm({
 
     setError('');
     const fd = new FormData();
-    fd.append('image', photoFile);
+    // 한글/특수문자 파일명은 busboy가 파싱 실패하므로 안전한 파일명으로 변환
+    const ext = photoFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+    fd.append('image', photoFile, `photo_${Date.now()}.${ext}`);
     fd.append('workAction', workAction);
     fd.append('workItem', workItem);
     fd.append('generatedText', generatedText);
@@ -809,37 +811,39 @@ function RequestDetailModal({
 
             <hr className="border-gray-100" />
 
-            {/* 일정 섹션 */}
-            <section>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                예정일
-                {req.scheduleChangeCount > 0 && (
-                  <span className="ml-2 text-orange-500 normal-case">
-                    변경 {req.scheduleChangeCount}회
-                  </span>
-                )}
-              </h4>
-              <input
-                type="date"
-                value={plannedDate}
-                onChange={(e) => setPlannedDate(e.target.value)}
-                className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
-              />
-              <input
-                type="text"
-                placeholder="일정 사유 (선택사항)"
-                value={scheduleReason}
-                onChange={(e) => setScheduleReason(e.target.value)}
-                className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={handleSchedule}
-                disabled={scheduleMutation.isPending}
-                className="w-full py-2 text-sm rounded border border-green-500 text-green-700 hover:bg-green-50 disabled:opacity-50"
-              >
-                {scheduleMutation.isPending ? '저장 중...' : '일정 저장'}
-              </button>
-            </section>
+            {/* 일정 섹션 — 수령 이후 상태에서만 표시 */}
+            {['RECEIVED', 'SCHEDULED', 'IN_PROGRESS'].includes(req.status) && (
+              <section>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  예정일
+                  {req.scheduleChangeCount > 0 && (
+                    <span className="ml-2 text-orange-500 normal-case">
+                      변경 {req.scheduleChangeCount}회
+                    </span>
+                  )}
+                </h4>
+                <input
+                  type="date"
+                  value={plannedDate}
+                  onChange={(e) => setPlannedDate(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="text"
+                  placeholder="일정 사유 (선택사항)"
+                  value={scheduleReason}
+                  onChange={(e) => setScheduleReason(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={handleSchedule}
+                  disabled={scheduleMutation.isPending}
+                  className="w-full py-2 text-sm rounded border border-green-500 text-green-700 hover:bg-green-50 disabled:opacity-50"
+                >
+                  {scheduleMutation.isPending ? '저장 중...' : '일정 저장'}
+                </button>
+              </section>
+            )}
 
             <hr className="border-gray-100" />
 

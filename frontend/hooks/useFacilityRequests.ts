@@ -44,12 +44,15 @@ export function useCreateFacilityRequest() {
       formData.append('category', input.category);
       formData.append('description', input.description);
       if (input.locationId) formData.append('locationId', input.locationId);
-      if (input.imageFile) formData.append('image', input.imageFile);
+      if (input.imageFile) {
+        const ext = input.imageFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+        formData.append('image', input.imageFile, `photo_${Date.now()}.${ext}`);
+      }
 
-      // Content-Type은 axios가 FormData 감지 후 자동으로 multipart/form-data로 설정
       const { data } = await apiClient.post<ApiResponse<CreateFacilityRequestResult>>(
         '/facility-requests',
         formData,
+        { headers: { 'Content-Type': undefined } },
       );
       return data.data;
     },

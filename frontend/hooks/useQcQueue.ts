@@ -136,6 +136,7 @@ export function useCompleteWork(requestId: string) {
       const { data } = await apiClient.post<ApiResponse<FacilityRequestDetail>>(
         `/facility-requests/${requestId}/complete`,
         formData,
+        { headers: { 'Content-Type': undefined } },
       );
       return data.data;
     },
