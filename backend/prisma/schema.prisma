@@ -203,8 +203,8 @@ model FacilityRequest {
   id          String                @id @default(cuid())
   title       String
   description String
-  /// STEP 6부터 기본값 REQUESTED. PENDING은 레거시 하위 호환.
-  status      FacilityRequestStatus @default(REQUESTED)
+  /// PENDING = 레거시 DB default. 신규 생성은 service에서 REQUESTED로 명시 설정.
+  status      FacilityRequestStatus @default(PENDING)
 
   /// 접수 카테고리 — QC 긴급/우선순위 판단은 STEP 6에서 처리
   category RequestCategory @default(OTHER)

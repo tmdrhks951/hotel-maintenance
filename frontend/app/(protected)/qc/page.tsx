@@ -598,7 +598,10 @@ export default function QcPage() {
 
       {error && (
         <div className="text-center py-10 text-sm text-red-500">
-          데이터를 불러오지 못했습니다
+          <p>데이터를 불러오지 못했습니다</p>
+          <p className="mt-1 text-xs text-red-400 font-mono">
+            {error instanceof Error ? error.message : String(error)}
+          </p>
         </div>
       )}
 
