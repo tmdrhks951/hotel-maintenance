@@ -204,7 +204,7 @@ export interface QcQueue {
 }
 
 // STEP 6: QC 판단 body
-export type QcReviewAction = 'MARK_REVIEW' | 'RECEIVE' | 'CANCEL';
+export type QcReviewAction = 'MARK_REVIEW' | 'RECEIVE' | 'CANCEL' | 'REVERT_TO_REQUESTED';
 
 export interface QcReviewBody {
   action?: QcReviewAction;

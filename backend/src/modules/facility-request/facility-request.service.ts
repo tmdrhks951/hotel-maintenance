@@ -30,8 +30,8 @@ const CATEGORY_LABEL: Record<string, string> = {
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['REVIEW_REQUIRED', 'RECEIVED', 'CANCELLED'],
   REQUESTED: ['REVIEW_REQUIRED', 'RECEIVED', 'CANCELLED'],
-  REVIEW_REQUIRED: ['RECEIVED', 'CANCELLED'],
-  RECEIVED: ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'],
+  REVIEW_REQUIRED: ['RECEIVED', 'CANCELLED', 'REQUESTED'],
+  RECEIVED: ['SCHEDULED', 'IN_PROGRESS', 'CANCELLED', 'REQUESTED'],
   SCHEDULED: ['IN_PROGRESS', 'RECEIVED', 'CANCELLED'],
   IN_PROGRESS: ['DONE_BY_QC', 'CANCELLED'],
   DONE_BY_QC: ['QC_VERIFIED', 'REOPENED'],
@@ -393,6 +393,7 @@ export async function qcReview(
   if (dto.action === 'MARK_REVIEW') newStatus = 'REVIEW_REQUIRED';
   else if (dto.action === 'RECEIVE') newStatus = 'RECEIVED';
   else if (dto.action === 'CANCEL') newStatus = 'CANCELLED';
+  else if (dto.action === 'REVERT_TO_REQUESTED') newStatus = 'REQUESTED';
 
   if (newStatus) assertValidTransition(request.status, newStatus);
 

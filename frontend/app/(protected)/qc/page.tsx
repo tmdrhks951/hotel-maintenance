@@ -256,7 +256,12 @@ function RequestDetailModal({
     setError('');
     try {
       await reviewMutation.mutateAsync({ action, reason: judgementReason || undefined });
-      showSuccess(action === 'MARK_REVIEW' ? '판단 필요로 이동했습니다' : '수령 처리됐습니다');
+      showSuccess(
+        action === 'MARK_REVIEW' ? '판단 필요로 이동했습니다' :
+        action === 'RECEIVE' ? '수령 처리됐습니다' :
+        action === 'REVERT_TO_REQUESTED' ? '신규 요청으로 되돌렸습니다' :
+        '처리됐습니다',
+      );
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '처리 실패');
     }
@@ -323,12 +328,33 @@ function RequestDetailModal({
 
     if (s === 'REVIEW_REQUIRED') {
       return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleAction('REVERT_TO_REQUESTED')}
+            disabled={reviewMutation.isPending}
+            className="py-2 px-3 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            ← 되돌리기
+          </button>
+          <button
+            onClick={() => handleAction('RECEIVE')}
+            disabled={reviewMutation.isPending}
+            className="flex-1 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            수령 처리
+          </button>
+        </div>
+      );
+    }
+
+    if (s === 'RECEIVED') {
+      return (
         <button
-          onClick={() => handleAction('RECEIVE')}
+          onClick={() => handleAction('REVERT_TO_REQUESTED')}
           disabled={reviewMutation.isPending}
-          className="w-full py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          className="w-full py-2 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
         >
-          수령 처리
+          ← 신규 요청으로 되돌리기
         </button>
       );
     }
