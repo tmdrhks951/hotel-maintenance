@@ -1,0 +1,81 @@
+import jwt, { SignOptions } from 'jsonwebtoken';
+import { Role, Position } from '@prisma/client';
+import { env } from '@/config/env';
+
+// ================================================================
+// Payload 타입 정의
+// ================================================================
+
+export interface JwtAccessPayload {
+  sub: string;
+  role: Role;
+  position: Position;
+  branchId: string | null;
+}
+
+export interface JwtRefreshPayload {
+  sub: string;
+}
+
+// ================================================================
+// 발급
+// ================================================================
+
+export function signAccessToken(payload: JwtAccessPayload): string {
+  const options: SignOptions = {
+    subject: payload.sub,
+    expiresIn: env.JWT_ACCESS_EXPIRES_IN as SignOptions['expiresIn'],
+  };
+
+  return jwt.sign(
+    {
+      role: payload.role,
+      position: payload.position,
+      branchId: payload.branchId,
+    },
+    env.JWT_ACCESS_SECRET,
+    options,
+  );
+}
+
+export function signRefreshToken(userId: string): string {
+  const options: SignOptions = {
+    subject: userId,
+    expiresIn: env.JWT_REFRESH_EXPIRES_IN as SignOptions['expiresIn'],
+  };
+
+  return jwt.sign({}, env.JWT_REFRESH_SECRET, options);
+}
+
+// ================================================================
+// 검증
+// ================================================================
+
+export function verifyAccessToken(token: string): JwtAccessPayload {
+  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as jwt.JwtPayload & {
+    role: Role;
+    position: Position;
+    branchId: string | null;
+  };
+
+  if (!decoded.sub || !decoded.role || !decoded.position) {
+    throw new Error('Invalid token payload');
+  }
+
+  return {
+    sub: decoded.sub,
+    role: decoded.role,
+    position: decoded.position,
+    branchId: decoded.branchId ?? null,
+  };
+}
+
+export function verifyRefreshToken(token: string): JwtRefreshPayload {
+  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as jwt.JwtPayload;
+
+  if (!decoded.sub) {
+    throw new Error('Invalid token payload');
+  }
+
+  return { sub: decoded.sub };
+}

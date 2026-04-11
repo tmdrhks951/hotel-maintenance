@@ -1,0 +1,423 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================================================
+// Enums
+// ================================================================
+
+enum Role {
+  ADMIN
+  OPERATIONS
+  QC
+}
+
+enum Position {
+  TEAM_LEADER
+  DEPUTY_LEADER
+  MEMBER
+  OTHER
+}
+
+enum FacilityRequestStatus {
+  PENDING              // 레거시 — STEP 5 이전 데이터 하위 호환
+  REQUESTED            // STEP 6 기본 초기 상태 (STEP 5 이후 기본값)
+  REVIEW_REQUIRED      // QC 검토 필요
+  RECEIVED             // QC 수령 완료
+  SCHEDULED            // 일정 등록됨
+  IN_PROGRESS          // 작업 진행중
+  DONE_BY_QC           // QC 작업 완료 등록 (STEP 7+)
+  QC_VERIFIED          // QC 최종 검토 완료 (STEP 7+)
+  OPERATIONS_CONFIRMED // 운영팀 확인 완료 (STEP 7+)
+  CLOSED               // 완전 종료
+  REOPENED             // 재오픈
+  CANCELLED            // 취소
+  COMPLETED            // 레거시
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum NotificationType {
+  FACILITY_REQUEST_CREATED
+  COMMENT_CREATED
+  STATUS_CHANGED
+}
+
+enum LocationType {
+  ROOM
+  PUBLIC_AREA
+  OFFICE
+  BACK_OF_HOUSE
+}
+
+enum RequestCategory {
+  PLUMBING
+  ELECTRICAL
+  HVAC
+  FURNITURE
+  CLEANING
+  STRUCTURAL
+  SAFETY
+  OTHER
+}
+
+enum MediaPhase {
+  BEFORE
+  AFTER
+}
+
+/// STEP 6: QC가 설정하는 요청 우선순위
+enum Priority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ================================================================
+// User
+// ================================================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         Role
+  /// OPERATIONS(MEMBER)·QC는 branchId 필수 — service 레벨 강제
+  /// TEAM_LEADER·DEPUTY_LEADER·ADMIN은 다중 지점 관리 가능 구조 (추후 확장)
+  position     Position  @default(MEMBER)
+  isActive     Boolean   @default(true)
+
+  /// ADMIN은 null 허용. OPERATIONS / QC는 application 레벨에서 필수 강제.
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  createdRequests   FacilityRequest[]  @relation("RequestCreatedBy")
+  assignedRequests  FacilityRequest[]  @relation("RequestAssignedTo")
+  /// STEP 6: 긴급 전환 처리자
+  emergencyRequests FacilityRequest[]  @relation("RequestEmergencySetBy")
+  /// STEP 6: 상태 변경 이력
+  statusLogs        StatusLog[]
+  comments          Comment[]
+  notifications     Notification[]
+  uploadedMedia     Media[]
+  notices           Notice[]
+  manuals           Manual[]
+  refreshTokens     RefreshToken[]
+
+  @@index([branchId])
+  @@map("users")
+}
+
+// ================================================================
+// RefreshToken
+//
+// 저장 방식: rawToken을 SHA-256으로 해시한 값만 저장 (평문 금지)
+// rotation: 재발급 시 구 토큰 isRevoked=true + 신 토큰 insert
+// reuse detection: revoked 토큰 재사용 시 해당 userId 전체 토큰 폐기
+// ================================================================
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  /// SHA-256(rawToken) — 평문 저장 금지
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ================================================================
+// Branch
+// ================================================================
+
+model Branch {
+  id       String  @id @default(cuid())
+  name     String
+  code     String  @unique
+  address  String?
+  isActive Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  users            User[]
+  locations        Location[]
+  facilityRequests FacilityRequest[]
+  notices          Notice[]
+  manuals          Manual[]
+
+  @@map("branches")
+}
+
+// ================================================================
+// Location
+// ================================================================
+
+model Location {
+  id       String       @id @default(cuid())
+  name     String
+  /// 위치 식별 코드 (optional). ROOM의 경우 객실번호로 활용.
+  code     String?
+  type     LocationType
+  isActive Boolean      @default(true)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  facilityRequests FacilityRequest[]
+
+  @@unique([branchId, code])
+  @@index([branchId])
+  @@map("locations")
+}
+
+// ================================================================
+// FacilityRequest
+// ================================================================
+
+model FacilityRequest {
+  id          String                @id @default(cuid())
+  title       String
+  description String
+  /// STEP 6부터 기본값 REQUESTED. PENDING은 레거시 하위 호환.
+  status      FacilityRequestStatus @default(REQUESTED)
+
+  /// 접수 카테고리 — QC 긴급/우선순위 판단은 STEP 6에서 처리
+  category RequestCategory @default(OTHER)
+
+  // ----------------------------------------------------------------
+  // STEP 6: 긴급 관리 — QC만 설정 가능
+  // ----------------------------------------------------------------
+  isEmergency      Boolean   @default(false)
+  emergencyReason  String?
+  emergencySetById String?
+  emergencySetBy   User?     @relation("RequestEmergencySetBy", fields: [emergencySetById], references: [id])
+  emergencySetAt   DateTime?
+
+  // ----------------------------------------------------------------
+  // STEP 6: 우선순위 — QC가 판단하여 설정
+  // ----------------------------------------------------------------
+  priority Priority @default(NORMAL)
+
+  // ----------------------------------------------------------------
+  // STEP 6: 일정 관리
+  // ----------------------------------------------------------------
+  plannedWorkDate     DateTime?
+  /// 최초 등록 후 변경할 때마다 증가
+  scheduleChangeCount Int       @default(0)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  /// Location과 연결. 중복 요청 방지 기준.
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  /// 요청 생성자 (OPERATIONS)
+  createdById String
+  createdBy   User   @relation("RequestCreatedBy", fields: [createdById], references: [id])
+
+  /// 담당 배정자 (QC). 배정 전 null.
+  assignedToId String?
+  assignedTo   User?   @relation("RequestAssignedTo", fields: [assignedToId], references: [id])
+
+  completedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  comments      Comment[]
+  media         Media[]
+  notifications Notification[]
+  statusLogs    StatusLog[]
+
+  @@index([branchId, status])
+  @@index([locationId])
+  @@index([branchId, createdAt])
+  @@index([assignedToId])
+  @@map("facility_requests")
+}
+
+// ================================================================
+// StatusLog
+//
+// 상태 전이 이력. 누가 / 언제 / 어떤 상태로 / 왜 변경했는지 기록.
+// ================================================================
+
+model StatusLog {
+  id         String                 @id @default(cuid())
+  requestId  String
+  request    FacilityRequest        @relation(fields: [requestId], references: [id])
+  /// 전이 전 상태. 최초 생성 시 null.
+  fromStatus FacilityRequestStatus?
+  toStatus   FacilityRequestStatus
+  /// 상태 변경 사유 (선택적)
+  reason     String?
+  changedById String
+  changedBy   User                  @relation(fields: [changedById], references: [id])
+  createdAt  DateTime               @default(now())
+
+  @@index([requestId])
+  @@map("status_logs")
+}
+
+// ================================================================
+// Comment
+// ================================================================
+
+model Comment {
+  id      String @id @default(cuid())
+  content String
+  depth   Int    @default(0)
+
+  requestId String
+  request   FacilityRequest @relation(fields: [requestId], references: [id])
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  parentId String?
+  parent   Comment?  @relation("CommentParent", fields: [parentId], references: [id])
+  children Comment[] @relation("CommentParent")
+
+  rootId String?
+  root   Comment?  @relation("CommentRoot", fields: [rootId], references: [id])
+  rootOf Comment[] @relation("CommentRoot")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  media Media[]
+
+  @@index([requestId])
+  @@index([rootId])
+  @@map("comments")
+}
+
+// ================================================================
+// Media
+// ================================================================
+
+model Media {
+  id       String    @id @default(cuid())
+  type     MediaType
+  url      String
+  filename String
+  size     Int
+
+  /// BEFORE = 운영팀 최초 등록 사진 / AFTER = 작업 완료 사진 (STEP 7+)
+  phase MediaPhase @default(BEFORE)
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  requestId String?
+  request   FacilityRequest? @relation(fields: [requestId], references: [id])
+
+  commentId String?
+  comment   Comment? @relation(fields: [commentId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+  @@index([commentId])
+  @@map("media")
+}
+
+// ================================================================
+// Notification
+// ================================================================
+
+model Notification {
+  id   String           @id @default(cuid())
+  type NotificationType
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  requestId String?
+  request   FacilityRequest? @relation(fields: [requestId], references: [id])
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ================================================================
+// Notice
+// ================================================================
+
+model Notice {
+  id          String  @id @default(cuid())
+  title       String
+  content     String
+  isPublished Boolean @default(false)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@map("notices")
+}
+
+// ================================================================
+// Manual
+// ================================================================
+
+model Manual {
+  id          String  @id @default(cuid())
+  title       String
+  content     String
+  isPublished Boolean @default(false)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@map("manuals")
+}
