@@ -25,9 +25,9 @@ async function main() {
   // ================================================================
   // 2. 지점 데이터 확인 — 이미 최신이면 스킵
   // ================================================================
-  const marker = await prisma.branch.findFirst({ where: { code: 'THESEOUL' } });
+  const marker = await prisma.branch.findFirst({ where: { code: 'GANGNAM' } });
   if (marker) {
-    console.log('✅ Branches already up to date. Skipping.');
+    console.log('✅ Branches already up to date (v2). Skipping.');
     return;
   }
 
@@ -42,29 +42,29 @@ async function main() {
   console.log('✅ Old data cleaned');
 
   // ================================================================
-  // 4. 신규 지점 생성 (20개)
+  // 4. 신규 지점 생성 (20개) — 일반 표시 순서 기준 sortOrder
   // ================================================================
   const branchDefs = [
-    { name: '사당점', code: 'SADANG', sortOrder: 1 },
-    { name: '카와우소 1호점', code: 'KAWAUSO1', sortOrder: 2 },
-    { name: '더서울점', code: 'THESEOUL', sortOrder: 3 },
-    { name: '종로점', code: 'JONGNO', sortOrder: 4 },
+    { name: '명동 1호점', code: 'MYEONGDONG1', sortOrder: 1 },
+    { name: '명동 2호점', code: 'MYEONGDONG2', sortOrder: 2 },
+    { name: '명동 3호점', code: 'MYEONGDONG3', sortOrder: 3 },
+    { name: '종로 1호점', code: 'JONGNO', sortOrder: 4 },
     { name: '종로 2호점', code: 'JONGNO2', sortOrder: 5 },
-    { name: '명동 1호점', code: 'MYEONGDONG1', sortOrder: 6 },
-    { name: 'SOA', code: 'SOA', sortOrder: 7 },
-    { name: '국도빌딩', code: 'GUKDO', sortOrder: 8 },
-    { name: '명동 2호점', code: 'MYEONGDONG2', sortOrder: 9 },
-    { name: '명동 3호점', code: 'MYEONGDONG3', sortOrder: 10 },
-    { name: '카와우소 2호점', code: 'KAWAUSO2', sortOrder: 11 },
-    { name: '스퀘어점', code: 'SQUARE', sortOrder: 12 },
-    { name: '덕수궁점', code: 'DEOKSUGUNG', sortOrder: 13 },
-    { name: '카와우소 3호점', code: 'KAWAUSO3', sortOrder: 14 },
-    { name: '센트럴점', code: 'CENTRAL', sortOrder: 15 },
-    { name: '신사 단델리온', code: 'DANDELION', sortOrder: 16 },
-    { name: '강남 1호점', code: 'GANGNAM1', sortOrder: 17 },
-    { name: '강남COEX점 본관(B동)', code: 'COEX_B', sortOrder: 18 },
-    { name: '강남COEX점 별관(A동)', code: 'COEX_A', sortOrder: 19 },
-    { name: '선릉점', code: 'SEOLLEUNG', sortOrder: 20 },
+    { name: '더서울', code: 'THESEOUL', sortOrder: 6 },
+    { name: '덕수궁', code: 'DEOKSUGUNG', sortOrder: 7 },
+    { name: '스퀘어', code: 'SQUARE', sortOrder: 8 },
+    { name: '센트럴', code: 'CENTRAL', sortOrder: 9 },
+    { name: '사당점', code: 'SADANG', sortOrder: 10 },
+    { name: '강남', code: 'GANGNAM', sortOrder: 11 },
+    { name: '코엑스 (본관)', code: 'COEX_B', sortOrder: 12 },
+    { name: '코엑스 (별관)', code: 'COEX_A', sortOrder: 13 },
+    { name: '신사 단델리온', code: 'DANDELION', sortOrder: 14 },
+    { name: '선릉점', code: 'SEOLLEUNG', sortOrder: 15 },
+    { name: '카와우소 1', code: 'KAWAUSO1', sortOrder: 16 },
+    { name: '카와우소 2', code: 'KAWAUSO2', sortOrder: 17 },
+    { name: '카와우소 3', code: 'KAWAUSO3', sortOrder: 18 },
+    { name: 'SOA', code: 'SOA', sortOrder: 19 },
+    { name: '국도빌딩', code: 'GUKDO', sortOrder: 20 },
   ];
 
   const map = {};
@@ -94,7 +94,7 @@ async function main() {
     KAWAUSO3:    [],
     CENTRAL:     ['301','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002'],
     DANDELION:   ['B101','B102','101','102','103','104','201','202','203','204','301','302'],
-    GANGNAM1:    ['401','501','601','701','801','901','1001','1101','1102'],
+    GANGNAM:     ['401','501','601','701','801','901','1001','1101','1102'],
     COEX_B:      ['201','202','301','302','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002','1101','1102','1201','1202'],
     COEX_A:      ['301','302','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002','1101','1102','1201'],
     SEOLLEUNG:   ['701','801','802','901','902','1001','1002','1101','1102','1201','1202','1301','1302'],
@@ -113,7 +113,6 @@ async function main() {
         roomCount++;
       }
     } else {
-      // rooms + office 구분 (종로점 305호)
       for (const r of roomData.rooms) {
         await prisma.location.create({
           data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },

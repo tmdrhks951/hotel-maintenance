@@ -86,52 +86,45 @@ export default function SignupPage() {
   // key: branch.code, value: 자동 포함될 branch.code[]
   // ----------------------------------------------------------------
   const BRANCH_AUTO_LINKS: Record<string, string[]> = {
-    MYEONGDONG: ['GUKDO', 'SOA', 'KAWAUSO2'],
-    DEOKSUGUNG: ['KAWAUSO3'],
-    SADANG:     ['KAWAUSO1'],
+    MYEONGDONG1: ['GUKDO', 'SOA', 'KAWAUSO2'],
+    MYEONGDONG2: ['GUKDO', 'SOA', 'KAWAUSO2'],
+    MYEONGDONG3: ['GUKDO', 'SOA', 'KAWAUSO2'],
+    DEOKSUGUNG:  ['KAWAUSO3'],
+    SADANG:      ['KAWAUSO1'],
   };
 
-  // 카와우소 호점 별칭 (연결 호점 표기)
+  // 카와우소 별칭 (회원가입 전용 표시)
   const KAWAUSO_ALIAS: Record<string, string> = {
-    KAWAUSO1: '카와우소 1호점 (사당)',
-    KAWAUSO2: '카와우소 2호점 (명동)',
-    KAWAUSO3: '카와우소 3호점 (덕수궁)',
+    KAWAUSO1: '카와우소 1 (사당)',
+    KAWAUSO2: '카와우소 2 (명동)',
+    KAWAUSO3: '카와우소 3 (덕수궁)',
   };
 
-  // 목록 상단 고정 코드 순서
-  const PIN_TOP_CODES = ['SOA', 'KAWAUSO1', 'KAWAUSO2', 'KAWAUSO3', 'GUKDO'];
+  // 회원가입 지점 목록 순서 (상단 고정 코드)
+  const SIGNUP_TOP_CODES = ['KAWAUSO1', 'KAWAUSO2', 'KAWAUSO3', 'SOA', 'GUKDO'];
 
-  // 카와우소만 개별 호점 표시, 나머지 부모(명동,종로,코엑스)는 부모명 하나로 표시
-  const unsortedBranches = (branches ?? []).flatMap((b) => {
+  // 모든 지점을 플랫하게 나열 + 카와우소 별칭 적용
+  const allBranches = (branches ?? []).flatMap((b) => {
     const children = b.children ?? [];
-    if (children.length === 0) return [b];
-    if (b.code === 'KAWAUSO') {
-      return children.map((c) => ({
-        ...c,
-        name: KAWAUSO_ALIAS[c.code] ?? `${b.name} ${c.name}`,
-      }));
+    if (children.length === 0) {
+      return [{ ...b, name: KAWAUSO_ALIAS[b.code] ?? b.name }];
     }
-    return [b];
+    // 자식이 있으면 자식만 표시 (부모는 그룹 헤더이므로 제외)
+    return children.map((c) => ({
+      ...c,
+      name: KAWAUSO_ALIAS[c.code] ?? c.name,
+    }));
   });
 
-  // SOA, 카와우소1,2,3, 국도빌딩을 목록 맨 위로
-  const flatBranches = [...unsortedBranches].sort((a, b) => {
-    const ai = PIN_TOP_CODES.indexOf(a.code);
-    const bi = PIN_TOP_CODES.indexOf(b.code);
+  // 회원가입 전용 정렬: 상단 고정 → 나머지는 API 순서(sortOrder) 유지
+  const flatBranches = [...allBranches].sort((a, b) => {
+    const ai = SIGNUP_TOP_CODES.indexOf(a.code);
+    const bi = SIGNUP_TOP_CODES.indexOf(b.code);
     if (ai !== -1 && bi !== -1) return ai - bi;
     if (ai !== -1) return -1;
     if (bi !== -1) return 1;
     return 0;
   });
-
-  // 묶음 부모 선택 시 자식 ID도 함께 전송하기 위한 맵
-  const groupedChildMap = new Map<string, string[]>();
-  for (const b of branches ?? []) {
-    const children = b.children ?? [];
-    if (children.length > 0 && b.code !== 'KAWAUSO') {
-      groupedChildMap.set(b.id, children.map((c) => c.id));
-    }
-  }
 
   // 자동 연결 지점 계산
   const autoLinkedIds = new Set<string>();
@@ -148,14 +141,8 @@ export default function SignupPage() {
   // 화면 표시용 (flatBranches 기준)
   const displayBranchIds = [...new Set([...selectedBranchIds, ...autoLinkedIds])];
 
-  // 서버 전송용: 묶음 부모 선택 시 자식 ID까지 확장
-  const effectiveBranchIds = (() => {
-    const set = new Set(displayBranchIds);
-    for (const id of displayBranchIds) {
-      groupedChildMap.get(id)?.forEach((cid) => set.add(cid));
-    }
-    return [...set];
-  })();
+  // 서버 전송용: 선택 + 자동연결 지점 ID 목록
+  const effectiveBranchIds = displayBranchIds;
 
   function toggleBranch(id: string) {
     if (autoLinkedIds.has(id)) return; // 자동 연결된 지점은 직접 토글 불가
