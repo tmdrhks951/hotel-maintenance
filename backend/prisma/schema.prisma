@@ -1,0 +1,540 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================================================================
+// Enums
+// ================================================================
+
+enum Role {
+  ADMIN
+  OPERATIONS
+  QC
+  VENDOR
+}
+
+enum Position {
+  TEAM_LEADER
+  DEPUTY_LEADER
+  MEMBER
+  OTHER
+}
+
+/// [AUTH STEP ADD START]
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Department {
+  OPERATIONS_1
+  OPERATIONS_2
+  OPERATIONS_3
+  QC_1
+  QC_3
+  NONE
+}
+
+enum ResetRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+/// [AUTH STEP ADD END]
+
+enum FacilityRequestStatus {
+  PENDING              // 레거시 — STEP 5 이전 데이터 하위 호환
+  REQUESTED            // STEP 6 기본 초기 상태 (STEP 5 이후 기본값)
+  REVIEW_REQUIRED      // QC 검토 필요
+  RECEIVED             // QC 수령 완료
+  SCHEDULED            // 일정 등록됨
+  IN_PROGRESS          // 작업 진행중
+  DONE_BY_QC           // QC 작업 완료 등록 (STEP 7+)
+  QC_VERIFIED          // QC 최종 검토 완료 (STEP 7+)
+  OPERATIONS_CONFIRMED // 운영팀 확인 완료 (STEP 7+)
+  CLOSED               // 완전 종료
+  REOPENED             // 재오픈
+  CANCELLED            // 취소
+  COMPLETED            // 레거시
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+/// STEP 10: EMERGENCY_SET / WORKER_ASSIGNED / REQUEST_REOPENED / OPERATIONS_CONFIRM_REQUESTED 추가
+enum NotificationType {
+  FACILITY_REQUEST_CREATED
+  COMMENT_CREATED
+  STATUS_CHANGED
+  EMERGENCY_SET                // STEP 10: 긴급 전환
+  WORKER_ASSIGNED              // STEP 10: 담당자 배정
+  REQUEST_REOPENED             // STEP 10: 재오픈
+  OPERATIONS_CONFIRM_REQUESTED // STEP 10: 운영팀 확인 요청
+}
+
+enum LocationType {
+  ROOM
+  PUBLIC_AREA
+  OFFICE
+  BACK_OF_HOUSE
+}
+
+enum RequestCategory {
+  PLUMBING
+  ELECTRICAL
+  HVAC
+  FURNITURE
+  CLEANING
+  STRUCTURAL
+  SAFETY
+  OTHER
+}
+
+enum MediaPhase {
+  BEFORE
+  AFTER
+}
+
+/// STEP 6: QC가 설정하는 요청 우선순위
+enum Priority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ================================================================
+// User
+// ================================================================
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         Role
+  /// OPERATIONS(MEMBER)·QC는 branchId 필수 — service 레벨 강제
+  /// TEAM_LEADER·DEPUTY_LEADER·ADMIN은 다중 지점 관리 가능 구조 (추후 확장)
+  position     Position  @default(MEMBER)
+  isActive     Boolean   @default(true)
+
+  /// [AUTH STEP ADD START]
+  loginId            String?      @unique
+  phone              String?
+  status             UserStatus   @default(APPROVED)
+  department         Department   @default(NONE)
+  securityQuestion1  String?
+  securityAnswer1    String?      /// bcrypt 해시 저장
+  securityQuestion2  String?
+  securityAnswer2    String?      /// bcrypt 해시 저장
+  /// [AUTH STEP ADD END]
+
+  /// ADMIN은 null 허용. OPERATIONS / QC는 application 레벨에서 필수 강제.
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id])
+  /// 다중 지점 담당 (운영팀 팀원 전용) — branchId는 primary, branchIds는 전체 목록
+  branchIds String[] @default([])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  createdSchedules  RecurringSchedule[] @relation("ScheduleCreatedBy")
+  createdRequests   FacilityRequest[]  @relation("RequestCreatedBy")
+  assignedRequests  FacilityRequest[]  @relation("RequestAssignedTo")
+  /// STEP 6: 긴급 전환 처리자
+  emergencyRequests FacilityRequest[]  @relation("RequestEmergencySetBy")
+  /// STEP 7: 작업 완료 처리자
+  completedRequests FacilityRequest[]  @relation("RequestCompletedBy")
+  /// STEP 8: QC 최종 검토 처리자
+  qcVerifiedRequests          FacilityRequest[]  @relation("RequestQcVerifiedBy")
+  /// STEP 8: 운영팀 확인 처리자
+  operationsConfirmedRequests FacilityRequest[]  @relation("RequestOperationsConfirmedBy")
+  /// STEP 6: 상태 변경 이력
+  statusLogs        StatusLog[]
+  comments          Comment[]
+  notifications     Notification[]
+  uploadedMedia     Media[]
+  notices           Notice[]
+  manuals           Manual[]
+  refreshTokens     RefreshToken[]
+  /// [AUTH STEP ADD START]
+  passwordResetRequests  PasswordResetRequest[]
+  reviewedPasswordResets PasswordResetRequest[] @relation("ReviewedBy")
+  /// [AUTH STEP ADD END]
+
+  @@index([branchId])
+  @@map("users")
+}
+
+// ================================================================
+// RefreshToken
+// ================================================================
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ================================================================
+// Branch
+// ================================================================
+
+model Branch {
+  id        String  @id @default(cuid())
+  name      String
+  code      String  @unique
+  address   String?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+  parentId  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  parent             Branch?  @relation("BranchHierarchy", fields: [parentId], references: [id])
+  children           Branch[] @relation("BranchHierarchy")
+  users              User[]
+  locations          Location[]
+  facilityRequests   FacilityRequest[]
+  recurringSchedules RecurringSchedule[]
+  notices            Notice[]
+  manuals            Manual[]
+
+  @@map("branches")
+}
+
+// ================================================================
+// Location
+// ================================================================
+
+model Location {
+  id       String       @id @default(cuid())
+  name     String
+  code     String?
+  type     LocationType
+  isActive Boolean      @default(true)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  facilityRequests   FacilityRequest[]
+  recurringSchedules RecurringSchedule[]
+
+  @@unique([branchId, code])
+  @@index([branchId])
+  @@map("locations")
+}
+
+// ================================================================
+// FacilityRequest
+// ================================================================
+
+model FacilityRequest {
+  id          String                @id @default(cuid())
+  title       String
+  description String
+  status      FacilityRequestStatus @default(PENDING)
+  category    RequestCategory       @default(OTHER)
+
+  isEmergency      Boolean   @default(false)
+  emergencyReason  String?
+  emergencySetById String?
+  emergencySetBy   User?     @relation("RequestEmergencySetBy", fields: [emergencySetById], references: [id])
+  emergencySetAt   DateTime?
+
+  priority Priority @default(NORMAL)
+
+  plannedWorkDate     DateTime?
+  scheduleChangeCount Int       @default(0)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("RequestCreatedBy", fields: [createdById], references: [id])
+
+  assignedToId String?
+  assignedTo   User?   @relation("RequestAssignedTo", fields: [assignedToId], references: [id])
+
+  completedById String?
+  completedBy   User?     @relation("RequestCompletedBy", fields: [completedById], references: [id])
+  completedAt   DateTime?
+
+  qcVerifiedById String?
+  qcVerifiedBy   User?     @relation("RequestQcVerifiedBy", fields: [qcVerifiedById], references: [id])
+  qcVerifiedAt   DateTime?
+
+  operationsConfirmedByUserId String?
+  operationsConfirmedBy       User?     @relation("RequestOperationsConfirmedBy", fields: [operationsConfirmedByUserId], references: [id])
+  operationsConfirmedAt       DateTime?
+
+  /// STEP 11: 재오픈 횟수
+  reopenCount Int @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  comments      Comment[]
+  media         Media[]
+  notifications Notification[]
+  statusLogs    StatusLog[]
+
+  @@index([branchId, status])
+  @@index([locationId])
+  @@index([branchId, createdAt])
+  @@index([assignedToId])
+  @@map("facility_requests")
+}
+
+// ================================================================
+// StatusLog
+// ================================================================
+
+model StatusLog {
+  id         String                 @id @default(cuid())
+  requestId  String
+  request    FacilityRequest        @relation(fields: [requestId], references: [id])
+  fromStatus FacilityRequestStatus?
+  toStatus   FacilityRequestStatus
+  reason     String?
+  changedById String
+  changedBy   User                  @relation(fields: [changedById], references: [id])
+  createdAt  DateTime               @default(now())
+
+  @@index([requestId])
+  @@map("status_logs")
+}
+
+// ================================================================
+// Comment
+// ================================================================
+
+model Comment {
+  id      String @id @default(cuid())
+  content String
+  depth   Int    @default(0)
+
+  requestId String
+  request   FacilityRequest @relation(fields: [requestId], references: [id])
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  parentId String?
+  parent   Comment?  @relation("CommentParent", fields: [parentId], references: [id])
+  children Comment[] @relation("CommentParent")
+
+  rootId String?
+  root   Comment?  @relation("CommentRoot", fields: [rootId], references: [id])
+  rootOf Comment[] @relation("CommentRoot")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  media Media[]
+
+  @@index([requestId])
+  @@index([rootId])
+  @@map("comments")
+}
+
+// ================================================================
+// Media
+// ================================================================
+
+model Media {
+  id       String    @id @default(cuid())
+  type     MediaType
+  url      String
+  filename String
+  size     Int
+  phase    MediaPhase @default(BEFORE)
+
+  uploadedById String
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+
+  requestId String?
+  request   FacilityRequest? @relation(fields: [requestId], references: [id])
+
+  commentId String?
+  comment   Comment? @relation(fields: [commentId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+  @@index([commentId])
+  @@map("media")
+}
+
+// ================================================================
+// Notification
+// ================================================================
+
+model Notification {
+  id   String           @id @default(cuid())
+  type NotificationType
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  requestId String?
+  request   FacilityRequest? @relation(fields: [requestId], references: [id])
+
+  /// STEP 10: 알림 제목
+  title   String  @default("")
+  /// STEP 10: 알림 상세 메시지 (선택)
+  message String?
+  /// STEP 10: 묶음 알림 키 — 같은 bundleKey끼리 그룹화 가능 (미래 확장용)
+  bundleKey String?
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@index([bundleKey])
+  @@map("notifications")
+}
+
+// ================================================================
+// Notice
+// ================================================================
+
+model Notice {
+  id          String  @id @default(cuid())
+  title       String
+  content     String
+  isPublished Boolean @default(false)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@map("notices")
+}
+
+// ================================================================
+// RecurringSchedule (반복 점검 스케줄)
+// ================================================================
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model RecurringSchedule {
+  id          String          @id @default(cuid())
+  title       String
+  description String          @default("")
+  category    RequestCategory @default(OTHER)
+  recurrence  RecurrenceType
+  /// WEEKLY: 0(일)~6(토), MONTHLY: 1~31
+  recurrenceDay Int?
+  /// 해당 요일/일자에 생성할 시각 (HH:mm, 24h)
+  recurrenceTime String       @default("09:00")
+  isActive    Boolean         @default(true)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  createdById String
+  createdBy   User @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
+
+  /// 마지막으로 FacilityRequest를 자동 생성한 날짜
+  lastGeneratedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@index([isActive])
+  @@map("recurring_schedules")
+}
+
+// ================================================================
+// Manual
+// ================================================================
+
+model Manual {
+  id          String  @id @default(cuid())
+  title       String
+  content     String
+  isPublished Boolean @default(false)
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@map("manuals")
+}
+
+/// [AUTH STEP ADD START]
+// ================================================================
+// PasswordResetRequest — 비밀번호 재설정 요청 (관리자 승인형)
+// ================================================================
+
+model PasswordResetRequest {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  status       ResetRequestStatus @default(PENDING)
+  reviewedById String?
+  reviewedBy   User?              @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  note         String?
+  createdAt    DateTime           @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("password_reset_requests")
+}
+/// [AUTH STEP ADD END]
