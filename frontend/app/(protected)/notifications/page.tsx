@@ -399,7 +399,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* 필터 칩 */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
         {FILTERS.map(({ key, label, icon }) => {
           const unread = badgeCount(key);
           const isActive = activeFilter === key;
@@ -407,7 +407,7 @@ export default function NotificationsPage() {
             <button
               key={key}
               onClick={() => setActiveFilter(key)}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors ${
+              className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors ${
                 isActive
                   ? 'bg-gray-800 text-white border-gray-800'
                   : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'

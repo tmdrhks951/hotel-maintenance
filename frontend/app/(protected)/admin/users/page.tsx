@@ -174,7 +174,7 @@ function UserFormPanel({
       onClick={onClose}
     >
       <div
-        className="h-full w-full max-w-md bg-white shadow-xl overflow-y-auto"
+        className="h-full w-full max-w-full sm:max-w-md bg-white shadow-xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -402,14 +402,14 @@ export default function UsersPage() {
       </div>
 
       {/* 필터 바 */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-4">
         {/* 이름/이메일 검색 */}
         <input
           type="text"
           placeholder="이름 또는 이메일 검색"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-400 w-48"
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-400 w-full sm:w-48"
         />
 
         {/* 역할 필터 */}
@@ -467,11 +467,11 @@ export default function UsersPage() {
 
       {/* 테이블 */}
       {!isLoading && !error && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           {filtered.length === 0 ? (
             <div className="text-center py-16 text-sm text-gray-400">사용자가 없습니다</div>
           ) : (
-            <table className="w-full">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">이름</th>

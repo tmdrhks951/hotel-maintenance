@@ -183,7 +183,7 @@ function OpsDetailPanel({
       onClick={onClose}
     >
       <div
-        className="h-full w-full max-w-lg bg-white shadow-xl overflow-y-auto"
+        className="h-full w-full max-w-full sm:max-w-lg bg-white shadow-xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -389,7 +389,7 @@ export default function OperationsPage() {
 
       {/* 4개 섹션 — 가로 나열, 각 섹션 아래 목록 바로 표시 */}
       {data && (
-        <div className="grid grid-cols-4 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 items-start">
           {SECTIONS.map(({ key, label, icon, accentClass }) => {
             const items = sectionData[key];
             return (

@@ -48,7 +48,7 @@ function EditBranchForm({
     <div className="border border-gray-200 rounded-lg p-4 bg-yellow-50 mb-4">
       <h3 className="text-sm font-semibold text-gray-800 mb-3">지점 정보 수정</h3>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">지점명</label>
             <input
@@ -124,7 +124,7 @@ function CreateLocationForm({ branchId, onClose }: { branchId: string; onClose: 
     <div className="border border-gray-200 rounded-lg p-4 bg-green-50 mb-3">
       <h4 className="text-sm font-semibold text-gray-800 mb-3">위치 등록</h4>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">타입 <span className="text-red-500">*</span></label>
             <select

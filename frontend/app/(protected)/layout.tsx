@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/appStore';
 import { useUnreadCount } from '@/hooks/useNotifications';
 import { useNotificationSSE } from '@/hooks/useNotificationSSE';
 
 // ================================================================
-// 알림 벨 (unread count — SSE가 실시간 갱신, 폴링은 fallback)
+// 알림 벨
 // ================================================================
 
 function NotificationBell() {
@@ -30,24 +30,45 @@ function NotificationBell() {
 }
 
 // ================================================================
-// 공통 nav 구분선
-// ================================================================
-
-function Sep() {
-  return <span className="text-gray-300">|</span>;
-}
-
-// ================================================================
-// Protected Layout
-// ================================================================
-
-// ================================================================
-// SSE 연결 컴포넌트 — 로그인된 동안 상시 연결 유지
+// SSE 연결 컴포넌트
 // ================================================================
 
 function SseConnector({ enabled }: { enabled: boolean }) {
   useNotificationSSE(enabled);
   return null;
+}
+
+// ================================================================
+// 네비게이션 링크 정의
+// ================================================================
+
+interface NavItem {
+  href: string;
+  label: string;
+}
+
+function getNavItems(role: string): NavItem[] {
+  switch (role) {
+    case 'OPERATIONS':
+      return [
+        { href: '/camera',     label: '요청 등록' },
+        { href: '/operations', label: '작업 확인' },
+      ];
+    case 'QC':
+      return [
+        { href: '/qc', label: 'QC 큐' },
+      ];
+    case 'ADMIN':
+      return [
+        { href: '/branches',    label: '지점 관리' },
+        { href: '/qc',          label: 'QC 큐' },
+        { href: '/operations',  label: '작업 확인' },
+        { href: '/admin/users', label: '사용자' },
+        { href: '/admin',       label: '관리' },
+      ];
+    default:
+      return [];
+  }
 }
 
 // ================================================================
@@ -57,6 +78,7 @@ function SseConnector({ enabled }: { enabled: boolean }) {
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, initialized, hydrate, clearAuth } = useAppStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!initialized) hydrate();
@@ -71,6 +93,11 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, [clearAuth, router]);
 
+  // 라우트 변경 시 모바일 메뉴 닫기
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [children]);
+
   if (!initialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -84,52 +111,47 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     return null;
   }
 
+  const navItems = getNavItems(user.role);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* SSE 연결 — 로그인 상태에서만 활성화 */}
       <SseConnector enabled={!!user} />
 
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          {/* 좌측: 로고 + 데스크톱 네비 + 모바일 햄버거 */}
           <div className="flex items-center gap-3">
             <span className="font-bold text-gray-900 text-sm">호텔 시설관리</span>
 
-            {user.role === 'OPERATIONS' && (
-              <>
-                <Sep />
-                <a href="/camera" className="text-sm text-gray-600 hover:text-blue-600">요청 등록</a>
-                <Sep />
-                <a href="/operations" className="text-sm text-gray-600 hover:text-blue-600">작업 확인</a>
-              </>
-            )}
+            {/* 데스크톱 네비 */}
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className="text-sm text-gray-600 hover:text-blue-600 px-2 py-1 rounded hover:bg-gray-50"
+                >
+                  {item.label}
+                </a>
+              ))}
+            </nav>
 
-            {user.role === 'QC' && (
-              <>
-                <Sep />
-                <a href="/qc" className="text-sm text-gray-600 hover:text-blue-600">QC 큐</a>
-              </>
-            )}
-
-            {user.role === 'ADMIN' && (
-              <>
-                <Sep />
-                <a href="/branches" className="text-sm text-gray-600 hover:text-blue-600">지점 관리</a>
-                <Sep />
-                <a href="/qc" className="text-sm text-gray-600 hover:text-blue-600">QC 큐</a>
-                <Sep />
-                <a href="/operations" className="text-sm text-gray-600 hover:text-blue-600">작업 확인</a>
-                <Sep />
-                <a href="/admin/users" className="text-sm text-gray-600 hover:text-blue-600">사용자</a>
-                <Sep />
-                <a href="/admin" className="text-sm text-gray-600 hover:text-blue-600">관리</a>
-              </>
+            {/* 모바일 햄버거 */}
+            {navItems.length > 0 && (
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden text-gray-600 hover:text-gray-900 p-1"
+                aria-label="메뉴"
+              >
+                {mobileMenuOpen ? '✕' : '☰'}
+              </button>
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-            {/* 알림 벨 — 모든 역할 */}
+          {/* 우측: 벨 + 사용자 + 로그아웃 */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <NotificationBell />
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 hidden sm:inline">
               {user.name}
               <span className="ml-1 text-gray-400">({user.role})</span>
             </span>
@@ -144,9 +166,24 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
             </button>
           </div>
         </div>
+
+        {/* 모바일 드롭다운 메뉴 */}
+        {mobileMenuOpen && (
+          <nav className="md:hidden border-t border-gray-100 bg-gray-50 px-4 py-2 space-y-1">
+            {navItems.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="block text-sm text-gray-700 hover:text-blue-600 hover:bg-white px-3 py-2 rounded-lg"
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+        )}
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6">{children}</main>
+      <main className="max-w-5xl mx-auto px-4 py-4 sm:py-6">{children}</main>
     </div>
   );
 }

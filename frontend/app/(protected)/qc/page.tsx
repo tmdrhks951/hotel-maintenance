@@ -743,7 +743,7 @@ function RequestDetailModal({
       onClick={onClose}
     >
       <div
-        className="h-full w-full max-w-lg bg-white shadow-xl overflow-y-auto"
+        className="h-full w-full max-w-full sm:max-w-lg bg-white shadow-xl overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 헤더 */}
@@ -1085,26 +1085,42 @@ export default function QcPage() {
 
       {/* 필터 바 */}
       {viewMode === 'queue' && (
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          {/* 지점 필터 — ADMIN만 */}
-          {user.role === 'ADMIN' && branches.length > 0 && (
-            <select
-              value={filterBranch}
-              onChange={(e) => { setFilterBranch(e.target.value); setSelectedId(null); }}
-              className="text-xs border border-gray-200 rounded px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
-            >
-              <option value="">전체 지점</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
+        <div className="space-y-2 mb-3">
+          {/* 1행: 지점 필터 + 정렬 */}
+          <div className="flex items-center gap-2">
+            {user.role === 'ADMIN' && branches.length > 0 && (
+              <select
+                value={filterBranch}
+                onChange={(e) => { setFilterBranch(e.target.value); setSelectedId(null); }}
+                className="text-xs border border-gray-200 rounded px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
+              >
+                <option value="">전체 지점</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="ml-auto flex rounded border border-gray-200 overflow-hidden text-xs">
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setSortBy(key)}
+                  className={`px-2.5 py-1.5 transition-colors border-l border-gray-200 first:border-l-0 ${
+                    sortBy === key
+                      ? 'bg-gray-800 text-white'
+                      : 'bg-white text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {SORT_LABELS[key]}
+                </button>
               ))}
-            </select>
-          )}
-
-          {/* 카테고리 칩 */}
-          <div className="flex flex-wrap gap-1">
+            </div>
+          </div>
+          {/* 2행: 카테고리 칩 (가로 스크롤) */}
+          <div className="flex gap-1 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
             <button
               onClick={() => setFilterCategory('all')}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${
                 filterCategory === 'all'
                   ? 'bg-gray-800 text-white border-gray-800'
                   : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
@@ -1116,30 +1132,13 @@ export default function QcPage() {
               <button
                 key={cat}
                 onClick={() => setFilterCategory(cat)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   filterCategory === cat
                     ? 'bg-gray-800 text-white border-gray-800'
                     : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
                 }`}
               >
                 {REQUEST_CATEGORY_LABEL[cat]}
-              </button>
-            ))}
-          </div>
-
-          {/* 정렬 */}
-          <div className="ml-auto flex rounded border border-gray-200 overflow-hidden text-xs">
-            {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => setSortBy(key)}
-                className={`px-2.5 py-1.5 transition-colors border-l border-gray-200 first:border-l-0 ${
-                  sortBy === key
-                    ? 'bg-gray-800 text-white'
-                    : 'bg-white text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {SORT_LABELS[key]}
               </button>
             ))}
           </div>
@@ -1161,7 +1160,7 @@ export default function QcPage() {
 
       {/* 큐 뷰 */}
       {viewMode === 'queue' && (data || completedData) && (
-        <div className="grid grid-cols-4 gap-4 h-[calc(100vh-200px)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 lg:h-[calc(100vh-250px)]">
           <QueueSection
             title="신규 요청"
             count={newRequests.length}

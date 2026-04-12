@@ -130,7 +130,7 @@ function CategoryGrid({
   onChange: (v: RequestCategory) => void;
 }) {
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
       {CATEGORIES.map(([cat, label]) => (
         <button
           key={cat}
