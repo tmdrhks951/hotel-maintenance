@@ -5,78 +5,131 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
+  // ================================================================
+  // 1. Admin 계정
+  // ================================================================
   const existing = await prisma.user.findFirst({ where: { email: 'admin@hotel.com' } });
-  if (existing) {
-    console.log('✅ Seed already applied. Skipping.');
+  if (!existing) {
+    const hash = await bcrypt.hash('Admin@1234!', 12);
+    await prisma.user.create({
+      data: {
+        email: 'admin@hotel.com', loginId: 'admin', passwordHash: hash,
+        name: '시스템 관리자', role: 'ADMIN', position: 'OTHER', isActive: true,
+      },
+    });
+    console.log('✅ Admin created');
+  } else {
+    console.log('✅ Admin already exists');
+  }
+
+  // ================================================================
+  // 2. 지점 데이터 확인 — 이미 최신이면 스킵
+  // ================================================================
+  const marker = await prisma.branch.findFirst({ where: { code: 'THESEOUL' } });
+  if (marker) {
+    console.log('✅ Branches already up to date. Skipping.');
     return;
   }
 
-  // 1. Admin
-  const hash = await bcrypt.hash('Admin@1234!', 12);
-  await prisma.user.create({
-    data: {
-      email: 'admin@hotel.com', loginId: 'admin', passwordHash: hash,
-      name: '시스템 관리자', role: 'ADMIN', position: 'OTHER', isActive: true,
-    },
-  });
-  console.log('✅ Admin created');
+  // ================================================================
+  // 3. 기존 지점/위치 정리
+  // ================================================================
+  console.log('🔄 Cleaning old branch/location data...');
+  await prisma.user.updateMany({ where: { branchId: { not: null } }, data: { branchId: null, branchIds: [] } });
+  await prisma.location.deleteMany({});
+  await prisma.branch.updateMany({ data: { parentId: null } });
+  await prisma.branch.deleteMany({});
+  console.log('✅ Old data cleaned');
 
-  // 2. Branches
-  const branches = [
-    { name: 'SOA', code: 'SOA', sortOrder: 1 },
-    { name: '카와우소 1호점 (사당)', code: 'KAWAUSO1', sortOrder: 2 },
-    { name: '카와우소 2호점 (명동)', code: 'KAWAUSO2', sortOrder: 3 },
-    { name: '카와우소 3호점 (덕수궁)', code: 'KAWAUSO3', sortOrder: 4 },
-    { name: '국도빌딩', code: 'GUKDO', sortOrder: 5 },
-    { name: '명동점', code: 'MYEONGDONG', sortOrder: 10 },
-    { name: '덕수궁점', code: 'DEOKSUGUNG', sortOrder: 20 },
-    { name: '사당점', code: 'SADANG', sortOrder: 30 },
+  // ================================================================
+  // 4. 신규 지점 생성 (20개)
+  // ================================================================
+  const branchDefs = [
+    { name: '사당점', code: 'SADANG', sortOrder: 1 },
+    { name: '카와우소 1호점', code: 'KAWAUSO1', sortOrder: 2 },
+    { name: '더서울점', code: 'THESEOUL', sortOrder: 3 },
+    { name: '종로점', code: 'JONGNO', sortOrder: 4 },
+    { name: '종로 2호점', code: 'JONGNO2', sortOrder: 5 },
+    { name: '명동 1호점', code: 'MYEONGDONG1', sortOrder: 6 },
+    { name: 'SOA', code: 'SOA', sortOrder: 7 },
+    { name: '국도빌딩', code: 'GUKDO', sortOrder: 8 },
+    { name: '명동 2호점', code: 'MYEONGDONG2', sortOrder: 9 },
+    { name: '명동 3호점', code: 'MYEONGDONG3', sortOrder: 10 },
+    { name: '카와우소 2호점', code: 'KAWAUSO2', sortOrder: 11 },
+    { name: '스퀘어점', code: 'SQUARE', sortOrder: 12 },
+    { name: '덕수궁점', code: 'DEOKSUGUNG', sortOrder: 13 },
+    { name: '카와우소 3호점', code: 'KAWAUSO3', sortOrder: 14 },
+    { name: '센트럴점', code: 'CENTRAL', sortOrder: 15 },
+    { name: '신사 단델리온', code: 'DANDELION', sortOrder: 16 },
+    { name: '강남 1호점', code: 'GANGNAM1', sortOrder: 17 },
+    { name: '강남COEX점 본관(B동)', code: 'COEX_B', sortOrder: 18 },
+    { name: '강남COEX점 별관(A동)', code: 'COEX_A', sortOrder: 19 },
+    { name: '선릉점', code: 'SEOLLEUNG', sortOrder: 20 },
   ];
 
   const map = {};
-  for (const b of branches) {
+  for (const b of branchDefs) {
     const r = await prisma.branch.create({ data: { name: b.name, code: b.code, sortOrder: b.sortOrder, isActive: true } });
     map[b.code] = r.id;
   }
+  console.log(`✅ ${branchDefs.length} branches created`);
 
-  const children = [
-    { name: '명동 1호점', code: 'MYEONGDONG1', sortOrder: 11, parent: 'MYEONGDONG' },
-    { name: '명동 2호점', code: 'MYEONGDONG2', sortOrder: 12, parent: 'MYEONGDONG' },
-    { name: '명동 3호점', code: 'MYEONGDONG3', sortOrder: 13, parent: 'MYEONGDONG' },
-    { name: '덕수궁 1호점', code: 'DEOKSUGUNG1', sortOrder: 21, parent: 'DEOKSUGUNG' },
-    { name: '덕수궁 2호점', code: 'DEOKSUGUNG2', sortOrder: 22, parent: 'DEOKSUGUNG' },
-    { name: '사당 1호점', code: 'SADANG1', sortOrder: 31, parent: 'SADANG' },
-  ];
+  // ================================================================
+  // 5. 객실(Location) 생성 — 실제 운영 데이터
+  // ================================================================
+  const branchRooms = {
+    SADANG:      ['301','302','401','402','403','501','502','503','601','602','603','701','702','703'],
+    KAWAUSO1:    [],
+    THESEOUL:    ['201','202','301','302','401','402','501','502','601','602','701','702','801','802','901','1001','1002'],
+    JONGNO:      { rooms: ['301','302','303','304','401','402','403','404','405','501','502','503','504','505'], office: ['305'] },
+    JONGNO2:     ['401','402','403','501','502'],
+    MYEONGDONG1: ['301','302','303','401','402','403','501','502','503','601','602','603','701','702','703','801','802','803'],
+    SOA:         [],
+    GUKDO:       [],
+    MYEONGDONG2: ['201','202','301','401','402','501','502','601','602','701','702','801','802','901','902'],
+    MYEONGDONG3: ['201','202','301','302','401','402'],
+    KAWAUSO2:    [],
+    SQUARE:      ['201','202','301','302','401','501'],
+    DEOKSUGUNG:  ['201','202','301','302','401','501','502','601'],
+    KAWAUSO3:    [],
+    CENTRAL:     ['301','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002'],
+    DANDELION:   ['B101','B102','101','102','103','104','201','202','203','204','301','302'],
+    GANGNAM1:    ['401','501','601','701','801','901','1001','1101','1102'],
+    COEX_B:      ['201','202','301','302','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002','1101','1102','1201','1202'],
+    COEX_A:      ['301','302','401','402','501','502','601','602','701','702','801','802','901','902','1001','1002','1101','1102','1201'],
+    SEOLLEUNG:   ['701','801','802','901','902','1001','1002','1101','1102','1201','1202','1301','1302'],
+  };
 
-  for (const c of children) {
-    const r = await prisma.branch.create({
-      data: { name: c.name, code: c.code, sortOrder: c.sortOrder, isActive: true, parentId: map[c.parent] },
-    });
-    map[c.code] = r.id;
-  }
-  console.log(`✅ ${Object.keys(map).length} branches created`);
+  let roomCount = 0;
+  for (const [code, roomData] of Object.entries(branchRooms)) {
+    const bid = map[code];
+    if (!bid) continue;
 
-  // 3. Locations
-  const locs = [
-    { name: '101호', type: 'ROOM' }, { name: '102호', type: 'ROOM' }, { name: '103호', type: 'ROOM' },
-    { name: '201호', type: 'ROOM' }, { name: '202호', type: 'ROOM' }, { name: '203호', type: 'ROOM' },
-    { name: '301호', type: 'ROOM' }, { name: '302호', type: 'ROOM' },
-    { name: '로비', type: 'PUBLIC_AREA' }, { name: '복도', type: 'PUBLIC_AREA' },
-    { name: '엘리베이터', type: 'PUBLIC_AREA' }, { name: '화장실(공용)', type: 'PUBLIC_AREA' },
-    { name: '사무실', type: 'OFFICE' },
-    { name: '직원휴게실', type: 'BACK_OF_HOUSE' }, { name: '세탁실', type: 'BACK_OF_HOUSE' }, { name: '기계실', type: 'BACK_OF_HOUSE' },
-  ];
-
-  const activeCodes = ['SOA','KAWAUSO1','KAWAUSO2','KAWAUSO3','GUKDO','MYEONGDONG1','MYEONGDONG2','MYEONGDONG3','DEOKSUGUNG1','DEOKSUGUNG2','SADANG1'];
-  let count = 0;
-  for (const code of activeCodes) {
-    if (!map[code]) continue;
-    for (const l of locs) {
-      await prisma.location.create({ data: { name: l.name, type: l.type, branchId: map[code], isActive: true } });
-      count++;
+    if (Array.isArray(roomData)) {
+      for (const r of roomData) {
+        await prisma.location.create({
+          data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },
+        });
+        roomCount++;
+      }
+    } else {
+      // rooms + office 구분 (종로점 305호)
+      for (const r of roomData.rooms) {
+        await prisma.location.create({
+          data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },
+        });
+        roomCount++;
+      }
+      for (const r of roomData.office) {
+        await prisma.location.create({
+          data: { name: `${r}호`, type: 'OFFICE', branchId: bid, isActive: true },
+        });
+        roomCount++;
+      }
     }
   }
-  console.log(`✅ ${count} locations created`);
+
+  console.log(`✅ ${roomCount} rooms created`);
   console.log('🎉 Production seed complete!');
 }
 
