@@ -4,7 +4,7 @@
   "description": "호텔 시설 유지보수 시스템 Backend",
   "scripts": {
     "dev": "nodemon",
-    "build": "prisma generate && tsc && tsc-alias",
+    "build": "prisma generate && prisma migrate deploy && tsc && tsc-alias",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
