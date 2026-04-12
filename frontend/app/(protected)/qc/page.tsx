@@ -81,6 +81,14 @@ function PriorityBadge({ priority }: { priority: Priority }) {
 // 요청 카드
 // ================================================================
 
+function requestCardColor(req: FacilityRequestCard, selected: boolean): string {
+  if (selected) return 'border-blue-500 bg-blue-50';
+  if (req.isEmergency)            return 'border-red-400 bg-red-50 hover:brightness-95';
+  if (req.priority === 'URGENT')  return 'border-red-300 bg-red-50 hover:brightness-95';
+  if (req.priority === 'HIGH')    return 'border-orange-300 bg-orange-50 hover:brightness-95';
+  return 'border-gray-200 bg-white hover:border-gray-300';
+}
+
 function RequestCard({
   req,
   selected,
@@ -93,11 +101,7 @@ function RequestCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg border transition-colors ${
-        selected
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-200 bg-white hover:border-gray-300'
-      }`}
+      className={`w-full text-left p-3 rounded-lg border transition-colors ${requestCardColor(req, selected)}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">

@@ -108,13 +108,12 @@ function RequestDetailDrawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-t-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
-        {/* 핸들 + 헤더 */}
-        <div className="flex-shrink-0 px-5 pt-3 pb-3 border-b border-gray-100">
-          <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-3" />
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col">
+        {/* 헤더 */}
+        <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-gray-100">
           <div className="flex items-start justify-between gap-2">
             {isLoading ? (
               <div className="h-5 bg-gray-100 rounded w-40 animate-pulse" />
