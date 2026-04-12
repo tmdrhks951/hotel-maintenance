@@ -504,6 +504,22 @@ export async function qcReview(
       .catch(() => {});
   }
 
+  // RECEIVE / START_WORK — 운영팀 대시보드 실시간 갱신
+  if (dto.action === 'RECEIVE' || dto.action === 'START_WORK') {
+    getOperationsUserIds(request.branchId)
+      .then((opsIds) =>
+        fanOut({
+          type: 'STATUS_CHANGED',
+          recipientIds: opsIds,
+          requestId,
+          title: dto.action === 'RECEIVE'
+            ? `수령 완료: ${updated.title}`
+            : `작업 시작: ${updated.title}`,
+        }),
+      )
+      .catch(() => {});
+  }
+
   return updated;
 }
 
@@ -594,6 +610,21 @@ export async function updateSchedule(
 
     return req;
   });
+
+  // 운영팀에게 일정 등록/변경 알림 — Operations 대시보드 실시간 갱신
+  getOperationsUserIds(request.branchId)
+    .then((opsIds) =>
+      fanOut({
+        type: 'STATUS_CHANGED',
+        recipientIds: opsIds,
+        requestId,
+        title: isFirstSchedule
+          ? `일정 등록: ${updated.title}`
+          : `일정 변경: ${updated.title}`,
+        message: dto.plannedWorkDate,
+      }),
+    )
+    .catch(() => {});
 
   return updated;
 }
@@ -736,6 +767,18 @@ export async function completeWork(
 
     return req;
   });
+
+  // 운영팀에게 작업 완료 알림 — 금일 진행 목록 실시간 갱신
+  getOperationsUserIds(request.branchId)
+    .then((opsIds) =>
+      fanOut({
+        type: 'STATUS_CHANGED',
+        recipientIds: opsIds,
+        requestId,
+        title: `QC 완료: ${updated.title}`,
+      }),
+    )
+    .catch(() => {});
 
   return updated;
 }
