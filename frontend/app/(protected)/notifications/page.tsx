@@ -43,24 +43,20 @@ function typeIcon(type: Notification['type']): string {
 // ================================================================
 
 function typeCardColor(type: Notification['type'], isRead: boolean, isToday_: boolean): string {
-  const dim = isRead ? 'opacity-60' : '';
-  // 금일 진행은 타입보다 우선해서 노란색
-  if (isToday_) return `border-yellow-200 bg-yellow-50 ${dim}`;
+  // 읽음: 채도 완전히 제거 — 흰 배경 + 연한 테두리 + 투명도
+  if (isRead) return 'border-gray-200 bg-white opacity-50';
+
+  // 미읽음: 타입별 선명한 채도 색상
+  if (isToday_) return 'border-yellow-400 bg-yellow-100';
   switch (type) {
-    case 'FACILITY_REQUEST_CREATED':
-      return `border-orange-100 bg-orange-50 ${dim}`;
-    case 'WORKER_ASSIGNED':
-      return `border-blue-200 bg-blue-50 ${dim}`;
-    case 'OPERATIONS_CONFIRM_REQUESTED':
-      return `border-green-200 bg-green-50 ${dim}`;
-    case 'COMMENT_CREATED':
-      return `border-purple-100 bg-purple-50 ${dim}`;
-    case 'EMERGENCY_SET':
-      return `border-red-200 bg-red-50 ${dim}`;
-    case 'REQUEST_REOPENED':
-      return `border-yellow-200 bg-yellow-50 ${dim}`;
-    default:
-      return `border-gray-200 bg-gray-50 ${dim}`;
+    case 'FACILITY_REQUEST_CREATED':     return 'border-orange-400 bg-orange-100';
+    case 'WORKER_ASSIGNED':              return 'border-blue-400 bg-blue-100';
+    case 'OPERATIONS_CONFIRM_REQUESTED': return 'border-green-400 bg-green-100';
+    case 'COMMENT_CREATED':              return 'border-purple-400 bg-purple-100';
+    case 'EMERGENCY_SET':                return 'border-red-400 bg-red-100';
+    case 'REQUEST_REOPENED':             return 'border-yellow-400 bg-yellow-100';
+    case 'STATUS_CHANGED':               return 'border-indigo-400 bg-indigo-100';
+    default:                             return 'border-gray-400 bg-gray-100';
   }
 }
 
@@ -106,8 +102,8 @@ function NotificationCard({
   const cardClass = colorByType
     ? typeCardColor(item.type, item.isRead, isToday(item.request?.plannedWorkDate))
     : item.isRead
-      ? 'border-gray-100 bg-white'
-      : 'border-blue-200 bg-blue-50';
+      ? 'border-gray-200 bg-white opacity-50'   // 읽음: 채도 제거
+      : 'border-blue-400 bg-blue-100';           // 미읽음: 선명한 파랑
 
   return (
     <div
@@ -285,12 +281,13 @@ export default function NotificationsPage() {
 
       {/* 전체 탭 색상 범례 */}
       {activeFilter === 'all' && !isLoading && filtered.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          <span className="text-[10px] text-gray-400 self-center">색상 구분:</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 border border-orange-100 text-orange-600">일정 요청</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600">일정 확정</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-50 border border-yellow-200 text-yellow-700">금일 진행</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-green-600">작업 완료</span>
+        <div className="flex flex-wrap gap-2 mb-3 items-center">
+          <span className="text-[10px] text-gray-400">색상 구분:</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-100 border border-orange-400 text-orange-700">일정 요청</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 border border-blue-400 text-blue-700">일정 확정</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 border border-yellow-400 text-yellow-700">금일 진행</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 border border-green-400 text-green-700">작업 완료</span>
+          <span className="text-[10px] text-gray-300 ml-1">· 읽음 항목은 흐리게 표시</span>
         </div>
       )}
 
