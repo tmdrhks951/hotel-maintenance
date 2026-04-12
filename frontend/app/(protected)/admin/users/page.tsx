@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useEscKey } from '@/hooks/useEscKey';
 import { useAppStore } from '@/stores/appStore';
 import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser } from '@/hooks/useUsers';
 import { useBranches } from '@/hooks/useBranches';
@@ -99,6 +100,8 @@ function UserFormPanel({
   const deactivateMutation = useDeactivateUser();
 
   const isEdit = !!editingUser;
+
+  useEscKey(onClose);
 
   // 폼 상태
   const [email,    setEmail]    = useState(editingUser?.email ?? '');

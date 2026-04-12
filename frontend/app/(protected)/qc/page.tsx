@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useEscKey } from '@/hooks/useEscKey';
 import { useAppStore } from '@/stores/appStore';
 import {
   useQcQueue,
@@ -469,6 +470,8 @@ function RequestDetailModal({
   const { user } = useAppStore();
   const { data: req, isLoading } = useFacilityRequestDetail(requestId);
   const reviewMutation = useQcReview(requestId);
+
+  useEscKey(onClose);
   const verifyMutation = useQcVerify(requestId);
   const scheduleMutation = useUpdateSchedule(requestId);
   const assignMutation = useAssignWorker(requestId);

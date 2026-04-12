@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNotifications, useMarkRead, useMarkAllRead } from '@/hooks/useNotifications';
 import { useFacilityRequestDetail } from '@/hooks/useQcQueue';
+import { useEscKey } from '@/hooks/useEscKey';
 import { useAppStore } from '@/stores/appStore';
 import { StatusTimeline } from '@/components/StatusTimeline';
 import { PhotoComparison } from '@/components/PhotoComparison';
@@ -100,6 +101,8 @@ function RequestDetailDrawer({
   onClose: () => void;
 }) {
   const { data: detail, isLoading } = useFacilityRequestDetail(requestId);
+
+  useEscKey(onClose);
 
   // 배경 클릭 시 닫기
   function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {

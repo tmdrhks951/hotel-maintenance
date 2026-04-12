@@ -16,6 +16,7 @@ import { PhotoComparison } from '@/components/PhotoComparison';
 import { StatusTimeline } from '@/components/StatusTimeline';
 import { CommentSection } from '@/components/CommentSection';
 import { WorkHistoryModal } from '@/components/WorkHistoryModal';
+import { useEscKey } from '@/hooks/useEscKey';
 
 // ================================================================
 // 섹션 정의
@@ -153,6 +154,8 @@ function OpsDetailPanel({
 }) {
   const { data: req, isLoading } = useFacilityRequestDetail(requestId);
   const confirmMutation = useOperationsConfirm(requestId);
+
+  useEscKey(onClose);
 
   const [note, setNote] = useState('');
   const [error, setError] = useState('');

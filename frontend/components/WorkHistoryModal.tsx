@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useWorkHistory } from '@/hooks/useQcQueue';
+import { useEscKey } from '@/hooks/useEscKey';
 import type { WorkHistoryItem } from '@/types';
 import { REQUEST_CATEGORY_LABEL, REQUEST_STATUS_LABEL } from '@/types';
 
@@ -179,6 +180,8 @@ export function WorkHistoryModal({
   onClose: () => void;
   branchId?: string | null;
 }) {
+  useEscKey(onClose);
+
   const today = new Date();
   const [viewYear,     setViewYear]     = useState(today.getFullYear());
   const [viewMonth,    setViewMonth]    = useState(today.getMonth()); // 0-indexed
