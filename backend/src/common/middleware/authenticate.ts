@@ -13,12 +13,17 @@ import { AppError } from '@/common/errors/AppError';
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  // SSE 연결은 EventSource가 헤더를 설정할 수 없으므로 ?token= 쿼리 파라미터로 대체 허용
+  const token: string | null = authHeader?.startsWith('Bearer ')
+    ? authHeader.slice(7)
+    : typeof req.query.token === 'string'
+    ? req.query.token
+    : null;
+
+  if (!token) {
     next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
     return;
   }
-
-  const token = authHeader.slice(7);
 
   try {
     const payload = verifyAccessToken(token);

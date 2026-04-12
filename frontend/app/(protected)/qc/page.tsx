@@ -4,6 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@/stores/appStore';
 import {
   useQcQueue,
+  useQcCompleted,
+  useQcHistory,
+  useQcVerify,
   useFacilityRequestDetail,
   useQcReview,
   useUpdateSchedule,
@@ -14,6 +17,7 @@ import {
 import type {
   FacilityRequestCard,
   FacilityRequestDetail,
+  QcHistoryCard,
   Priority,
   QcReviewAction,
   WorkAction,
@@ -26,6 +30,10 @@ import {
   WORK_ACTION_ITEMS,
   generateCompletionText,
 } from '@/types';
+import { PhotoComparison } from '@/components/PhotoComparison';
+import { StatusTimeline } from '@/components/StatusTimeline';
+import { CommentSection } from '@/components/CommentSection';
+import { WorkHistoryModal } from '@/components/WorkHistoryModal';
 
 // ================================================================
 // localStorage 최근 문구 유틸
@@ -126,6 +134,59 @@ function RequestCard({
 }
 
 // ================================================================
+// 완료 이력 카드
+// ================================================================
+
+function HistoryCard({
+  item,
+  selected,
+  onClick,
+}: {
+  item: QcHistoryCard;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+        selected
+          ? 'border-blue-500 bg-blue-50'
+          : 'border-gray-200 bg-white hover:border-gray-300'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{item.title}</p>
+        {item._count.comments > 0 && (
+          <span className="flex-shrink-0 text-xs bg-blue-600 text-white rounded-full px-2 py-0.5">
+            💬 {item._count.comments}
+          </span>
+        )}
+      </div>
+      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-gray-500">{REQUEST_CATEGORY_LABEL[item.category]}</span>
+        {item.location && (
+          <span className="text-xs text-gray-400">· {item.location.name}</span>
+        )}
+      </div>
+      <div className="mt-1.5 text-xs text-gray-400 space-y-0.5">
+        {item.completedAt && (
+          <div>작업 완료: {new Date(item.completedAt).toLocaleDateString('ko-KR')}</div>
+        )}
+        {item.operationsConfirmedAt && (
+          <div className="text-teal-600">
+            운영팀 확인: {new Date(item.operationsConfirmedAt).toLocaleDateString('ko-KR')}
+            {item.operationsConfirmedBy && (
+              <span className="ml-1">({item.operationsConfirmedBy.name})</span>
+            )}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// ================================================================
 // 큐 섹션 (신규/판단필요/진행중)
 // ================================================================
 
@@ -170,43 +231,6 @@ function QueueSection({
   );
 }
 
-// ================================================================
-// 상태 이력
-// ================================================================
-
-function StatusLogList({ logs }: { logs: FacilityRequestDetail['statusLogs'] }) {
-  if (logs.length === 0) return null;
-  return (
-    <div className="mt-4 pt-4 border-t border-gray-100">
-      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        상태 이력
-      </h4>
-      <div className="space-y-1.5">
-        {logs.map((log) => (
-          <div key={log.id} className="text-xs text-gray-500 flex items-start gap-2">
-            <span className="text-gray-300 mt-0.5">▸</span>
-            <div>
-              <span className="font-medium text-gray-700">
-                {log.fromStatus ? REQUEST_STATUS_LABEL[log.fromStatus] : '(생성)'} →{' '}
-                {REQUEST_STATUS_LABEL[log.toStatus]}
-              </span>
-              {log.reason && <span className="ml-1 text-gray-400">({log.reason})</span>}
-              <span className="ml-2 text-gray-300">
-                {log.changedBy.name} ·{' '}
-                {new Date(log.createdAt).toLocaleString('ko-KR', {
-                  month: 'numeric',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ================================================================
 // STEP 7: 작업 완료 등록 폼
@@ -438,8 +462,10 @@ function RequestDetailModal({
   requestId: string;
   onClose: () => void;
 }) {
+  const { user } = useAppStore();
   const { data: req, isLoading } = useFacilityRequestDetail(requestId);
   const reviewMutation = useQcReview(requestId);
+  const verifyMutation = useQcVerify(requestId);
   const scheduleMutation = useUpdateSchedule(requestId);
   const assignMutation = useAssignWorker(requestId);
 
@@ -514,6 +540,17 @@ function RequestDetailModal({
         action === 'START_WORK' ? '작업을 시작했습니다' :
         '처리됐습니다',
       );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '처리 실패');
+    }
+  }
+
+  // QC 최종 검토 (DONE_BY_QC → QC_VERIFIED | REOPENED)
+  async function handleVerify(action: 'VERIFY' | 'REOPEN') {
+    setError('');
+    try {
+      await verifyMutation.mutateAsync({ action });
+      showSuccess(action === 'VERIFY' ? 'QC 검토 완료 처리됐습니다' : '재오픈됐습니다');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '처리 실패');
     }
@@ -631,6 +668,27 @@ function RequestDetailModal({
       );
     }
 
+    if (s === 'DONE_BY_QC') {
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={() => handleVerify('REOPEN')}
+            disabled={verifyMutation.isPending}
+            className="py-2 px-3 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+          >
+            ← 재오픈
+          </button>
+          <button
+            onClick={() => handleVerify('VERIFY')}
+            disabled={verifyMutation.isPending}
+            className="flex-1 py-2 text-sm rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+          >
+            {verifyMutation.isPending ? '처리 중...' : 'QC 검토 완료'}
+          </button>
+        </div>
+      );
+    }
+
     return null;
   }
 
@@ -701,109 +759,99 @@ function RequestDetailModal({
                 <div>카테고리: <span className="text-gray-700">{REQUEST_CATEGORY_LABEL[req.category]}</span></div>
                 <div className="text-gray-700 mt-1">{req.description}</div>
               </div>
-              {/* BEFORE 사진 */}
-              {req.media.filter((m) => m.phase === 'BEFORE').map((m) => (
-                <img
-                  key={m.id}
-                  src={m.url}
-                  alt="BEFORE"
-                  className="mt-2 w-full rounded-lg object-cover max-h-48"
-                />
-              ))}
-              {/* AFTER 사진 (완료 후) */}
-              {req.media.filter((m) => m.phase === 'AFTER').length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-400 mb-1">완료 사진</p>
-                  {req.media.filter((m) => m.phase === 'AFTER').map((m) => (
-                    <img
-                      key={m.id}
-                      src={m.url}
-                      alt="AFTER"
-                      className="w-full rounded-lg object-cover max-h-48 border-2 border-green-200"
-                    />
-                  ))}
-                </div>
-              )}
+              <PhotoComparison media={req.media} />
               {/* 완료 정보 */}
               {req.completedAt && (
                 <div className="mt-2 text-xs text-green-700 bg-green-50 rounded px-2 py-1">
-                  완료: {new Date(req.completedAt).toLocaleString('ko-KR')}
+                  QC 완료: {new Date(req.completedAt).toLocaleString('ko-KR')}
                   {req.completedBy && <span className="ml-1">({req.completedBy.name})</span>}
+                </div>
+              )}
+              {/* QC 검토 완료 정보 */}
+              {req.qcVerifiedAt && (
+                <div className="mt-1 text-xs text-purple-700 bg-purple-50 rounded px-2 py-1">
+                  QC 검토: {new Date(req.qcVerifiedAt).toLocaleString('ko-KR')}
+                  {req.qcVerifiedBy && <span className="ml-1">({req.qcVerifiedBy.name})</span>}
                 </div>
               )}
             </section>
 
             <hr className="border-gray-100" />
 
-            {/* 판단 섹션: 긴급 + 우선순위 */}
+            {/* 판단 섹션 */}
             <section>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                판단
-              </h4>
+              {/* 긴급/우선순위 — 작업 전 단계(신규·판단필요·수령·일정·진행중)에서만 표시 */}
+              {['PENDING', 'REQUESTED', 'REVIEW_REQUIRED', 'RECEIVED', 'SCHEDULED', 'IN_PROGRESS'].includes(req.status) && (
+                <>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                    판단
+                  </h4>
 
-              {/* 긴급 토글 */}
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isEmergency ?? false}
-                  onChange={(e) => setIsEmergency(e.target.checked)}
-                  className="w-4 h-4 accent-red-600"
-                />
-                <span className="text-sm font-medium text-gray-800">
-                  🚨 긴급 처리
-                </span>
-              </label>
+                  {/* 긴급 토글 */}
+                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isEmergency ?? false}
+                      onChange={(e) => setIsEmergency(e.target.checked)}
+                      className="w-4 h-4 accent-red-600"
+                    />
+                    <span className="text-sm font-medium text-gray-800">
+                      🚨 긴급 처리
+                    </span>
+                  </label>
 
-              {isEmergency && (
-                <input
-                  type="text"
-                  placeholder="긴급 사유 입력 (필수)"
-                  value={emergencyReason}
-                  onChange={(e) => setEmergencyReason(e.target.value)}
-                  className="w-full mb-2 px-3 py-2 text-sm border border-red-300 rounded focus:outline-none focus:border-red-500"
-                />
+                  {isEmergency && (
+                    <input
+                      type="text"
+                      placeholder="긴급 사유 입력 (필수)"
+                      value={emergencyReason}
+                      onChange={(e) => setEmergencyReason(e.target.value)}
+                      className="w-full mb-2 px-3 py-2 text-sm border border-red-300 rounded focus:outline-none focus:border-red-500"
+                    />
+                  )}
+
+                  {/* 우선순위 */}
+                  <div className="mb-3">
+                    <label className="block text-xs text-gray-500 mb-1">우선순위</label>
+                    <div className="flex gap-2">
+                      {(['NORMAL', 'HIGH', 'URGENT'] as Priority[]).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setPriority(p)}
+                          className={`flex-1 py-1.5 text-xs rounded border transition-colors ${
+                            priority === p
+                              ? p === 'URGENT'
+                                ? 'bg-red-600 text-white border-red-600'
+                                : p === 'HIGH'
+                                  ? 'bg-orange-500 text-white border-orange-500'
+                                  : 'bg-blue-600 text-white border-blue-600'
+                              : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                          }`}
+                        >
+                          {PRIORITY_LABEL[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 사유 (선택) */}
+                  <input
+                    type="text"
+                    placeholder="판단 사유 (선택사항)"
+                    value={judgementReason}
+                    onChange={(e) => setJudgementReason(e.target.value)}
+                    className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
+                  />
+
+                  <button
+                    onClick={handleJudgement}
+                    disabled={reviewMutation.isPending}
+                    className="w-full py-2 text-sm rounded bg-gray-800 text-white hover:bg-gray-700 disabled:opacity-50 mb-3"
+                  >
+                    {reviewMutation.isPending ? '저장 중...' : '긴급 / 우선순위 저장'}
+                  </button>
+                </>
               )}
-
-              {/* 우선순위 */}
-              <div className="mb-3">
-                <label className="block text-xs text-gray-500 mb-1">우선순위</label>
-                <div className="flex gap-2">
-                  {(['NORMAL', 'HIGH', 'URGENT'] as Priority[]).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPriority(p)}
-                      className={`flex-1 py-1.5 text-xs rounded border transition-colors ${
-                        priority === p
-                          ? p === 'URGENT'
-                            ? 'bg-red-600 text-white border-red-600'
-                            : p === 'HIGH'
-                              ? 'bg-orange-500 text-white border-orange-500'
-                              : 'bg-blue-600 text-white border-blue-600'
-                          : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      {PRIORITY_LABEL[p]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 사유 (선택) */}
-              <input
-                type="text"
-                placeholder="판단 사유 (선택사항)"
-                value={judgementReason}
-                onChange={(e) => setJudgementReason(e.target.value)}
-                className="w-full mb-2 px-3 py-2 text-sm border border-gray-200 rounded focus:outline-none focus:border-blue-500"
-              />
-
-              <button
-                onClick={handleJudgement}
-                disabled={reviewMutation.isPending}
-                className="w-full py-2 text-sm rounded bg-gray-800 text-white hover:bg-gray-700 disabled:opacity-50 mb-3"
-              >
-                {reviewMutation.isPending ? '저장 중...' : '긴급 / 우선순위 저장'}
-              </button>
 
               {/* 상태 전이 버튼 */}
               {renderActionButtons()}
@@ -873,8 +921,17 @@ function RequestDetailModal({
               </button>
             </section>
 
-            {/* 상태 이력 */}
-            <StatusLogList logs={req.statusLogs} />
+            {/* 처리 이력 */}
+            <StatusTimeline logs={req.statusLogs} />
+
+            {/* 댓글 */}
+            {user && (
+              <CommentSection
+                requestId={requestId}
+                currentUserId={user.id}
+                currentRole={user.role}
+              />
+            )}
           </div>
         )}
       </div>
@@ -888,11 +945,15 @@ function RequestDetailModal({
 
 export default function QcPage() {
   const { user } = useAppStore();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId,  setSelectedId]  = useState<string | null>(null);
+  const [viewMode,    setViewMode]    = useState<'queue' | 'history'>('queue');
+  const [showHistory, setShowHistory] = useState(false);
 
   // QC는 자신의 지점만, ADMIN은 전체
   const branchId = user?.role === 'QC' ? user.branchId : undefined;
   const { data, isLoading, error, refetch } = useQcQueue(branchId);
+  const { data: completedData, refetch: refetchCompleted } = useQcCompleted(branchId);
+  const { data: historyData = [], refetch: refetchHistory } = useQcHistory(branchId);
 
   if (!user || (user.role !== 'QC' && user.role !== 'ADMIN')) {
     return (
@@ -905,30 +966,77 @@ export default function QcPage() {
   const newRequests = data?.newRequests ?? [];
   const reviewRequired = data?.reviewRequired ?? [];
   const inProgress = data?.inProgress ?? [];
+  const doneByQc = completedData?.doneByQc ?? [];
 
   return (
     <div className="h-full">
       {/* 페이지 헤더 */}
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-900">QC 작업 큐</h1>
-          <p className="text-xs text-gray-400 mt-0.5">
-            총 {newRequests.length + reviewRequired.length + inProgress.length}건 진행 중
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">QC 작업 큐</h1>
+            {viewMode === 'queue' && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                총 {newRequests.length + reviewRequired.length + inProgress.length + doneByQc.length}건 진행 중
+              </p>
+            )}
+            {viewMode === 'history' && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                완료 이력 {historyData.length}건
+              </p>
+            )}
+          </div>
+          {/* 뷰 토글 */}
+          <div className="flex rounded border border-gray-200 overflow-hidden text-xs">
+            <button
+              onClick={() => { setViewMode('queue'); setSelectedId(null); }}
+              className={`px-3 py-1.5 transition-colors ${
+                viewMode === 'queue'
+                  ? 'bg-gray-800 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              큐
+            </button>
+            <button
+              onClick={() => { setViewMode('history'); setSelectedId(null); refetchHistory(); }}
+              className={`px-3 py-1.5 transition-colors border-l border-gray-200 ${
+                viewMode === 'history'
+                  ? 'bg-gray-800 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              완료 이력
+              {historyData.length > 0 && viewMode !== 'history' && (
+                <span className="ml-1.5 bg-blue-500 text-white rounded-full px-1.5 text-[10px]">
+                  {historyData.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 rounded px-2 py-1"
-        >
-          새로고침
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowHistory(true)}
+            className="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 rounded px-2 py-1 flex items-center gap-1"
+            title="작업 이력 조회"
+          >
+            📅 이력
+          </button>
+          <button
+            onClick={() => { refetch(); refetchCompleted(); if (viewMode === 'history') refetchHistory(); }}
+            className="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 rounded px-2 py-1"
+          >
+            새로고침
+          </button>
+        </div>
       </div>
 
-      {isLoading && (
+      {isLoading && viewMode === 'queue' && (
         <div className="text-center py-20 text-sm text-gray-400">로딩 중...</div>
       )}
 
-      {error && (
+      {error && viewMode === 'queue' && (
         <div className="text-center py-10 text-sm text-red-500">
           <p>데이터를 불러오지 못했습니다</p>
           <p className="mt-1 text-xs text-red-400 font-mono">
@@ -937,8 +1045,9 @@ export default function QcPage() {
         </div>
       )}
 
-      {data && (
-        <div className="grid grid-cols-3 gap-4 h-[calc(100vh-200px)]">
+      {/* 큐 뷰 */}
+      {viewMode === 'queue' && (data || completedData) && (
+        <div className="grid grid-cols-4 gap-4 h-[calc(100vh-200px)]">
           <QueueSection
             title="신규 요청"
             count={newRequests.length}
@@ -963,6 +1072,34 @@ export default function QcPage() {
             onSelect={setSelectedId}
             accent="border-green-400"
           />
+          <QueueSection
+            title="QC 완료"
+            count={doneByQc.length}
+            items={doneByQc}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            accent="border-purple-400"
+          />
+        </div>
+      )}
+
+      {/* 완료 이력 뷰 */}
+      {viewMode === 'history' && (
+        <div className="max-w-2xl">
+          {historyData.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-20">완료된 요청이 없습니다</p>
+          ) : (
+            <div className="space-y-2 overflow-y-auto h-[calc(100vh-200px)]">
+              {historyData.map((item) => (
+                <HistoryCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedId === item.id}
+                  onClick={() => setSelectedId(item.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -971,6 +1108,14 @@ export default function QcPage() {
         <RequestDetailModal
           requestId={selectedId}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      {/* 작업 이력 모달 */}
+      {showHistory && (
+        <WorkHistoryModal
+          onClose={() => setShowHistory(false)}
+          branchId={user?.role === 'QC' ? user.branchId : undefined}
         />
       )}
     </div>

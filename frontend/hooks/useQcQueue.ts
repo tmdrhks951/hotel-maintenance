@@ -3,8 +3,15 @@ import { apiClient } from '@/lib/api';
 import type {
   ApiResponse,
   QcQueue,
+  QcCompletedQueue,
+  QcHistoryCard,
+  OperationsPendingQueue,
+  OperationsDashboard,
+  WorkHistoryItem,
   FacilityRequestDetail,
   QcReviewBody,
+  QcVerifyBody,
+  OperationsConfirmBody,
   AssignableUser,
 } from '@/types';
 
@@ -23,8 +30,8 @@ export function useQcQueue(branchId?: string | null) {
       );
       return data.data;
     },
-    // 30초마다 자동 갱신
-    refetchInterval: 30_000,
+    // SSE 실시간 갱신이 주 업데이트 — 폴링은 60초 fallback
+    refetchInterval: 60_000,
   });
 }
 
@@ -126,6 +133,138 @@ export function useAssignableUsers(branchId: string | null | undefined) {
 }
 
 // ================================================================
+// STEP 8: QC 완료 큐 조회
+// ================================================================
+
+export function useQcCompleted(branchId?: string | null) {
+  return useQuery({
+    queryKey: ['qc-completed', branchId],
+    queryFn: async () => {
+      const params = branchId ? `?branchId=${branchId}` : '';
+      const { data } = await apiClient.get<ApiResponse<QcCompletedQueue>>(
+        `/facility-requests/qc-completed${params}`,
+      );
+      return data.data;
+    },
+    refetchInterval: 60_000, // SSE fallback
+  });
+}
+
+// ================================================================
+// STEP 8: QC 최종 검토
+// ================================================================
+
+export function useQcVerify(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: QcVerifyBody) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/qc-verify`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.setQueryData(['facility-request', requestId], updated);
+    },
+  });
+}
+
+// ================================================================
+// STEP 8: 운영팀 확인 큐 조회
+// ================================================================
+
+export function useOperationsPending(branchId?: string | null) {
+  return useQuery({
+    queryKey: ['operations-pending', branchId],
+    queryFn: async () => {
+      const params = branchId ? `?branchId=${branchId}` : '';
+      const { data } = await apiClient.get<ApiResponse<OperationsPendingQueue>>(
+        `/facility-requests/operations-pending${params}`,
+      );
+      return data.data;
+    },
+    refetchInterval: 60_000, // SSE fallback
+  });
+}
+
+// ================================================================
+// 작업 이력 조회 (달력·키워드 검색)
+// ================================================================
+
+export interface WorkHistoryParams {
+  date?: string;       // YYYY-MM-DD 특정일
+  startDate?: string;  // YYYY-MM-DD 월 범위 시작
+  endDate?: string;    // YYYY-MM-DD 월 범위 끝
+  keyword?: string;    // 키워드
+  branchId?: string;
+}
+
+export function useWorkHistory(
+  params: WorkHistoryParams,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['work-history', params],
+    queryFn: async () => {
+      const sp = new URLSearchParams();
+      if (params.date)      sp.set('date',      params.date);
+      if (params.startDate) sp.set('startDate', params.startDate);
+      if (params.endDate)   sp.set('endDate',   params.endDate);
+      if (params.keyword)   sp.set('keyword',   params.keyword);
+      if (params.branchId)  sp.set('branchId',  params.branchId);
+      const { data } = await apiClient.get<ApiResponse<WorkHistoryItem[]>>(
+        `/facility-requests/work-history?${sp.toString()}`,
+      );
+      return data.data;
+    },
+    enabled: options?.enabled !== false,
+    staleTime: 60_000,
+  });
+}
+
+// ================================================================
+// 운영팀 대시보드 (4개 섹션)
+// ================================================================
+
+export function useOperationsDashboard(branchId?: string | null) {
+  return useQuery({
+    queryKey: ['operations-dashboard', branchId],
+    queryFn: async () => {
+      const params = branchId ? `?branchId=${branchId}` : '';
+      const { data } = await apiClient.get<ApiResponse<OperationsDashboard>>(
+        `/facility-requests/operations-dashboard${params}`,
+      );
+      return data.data;
+    },
+    refetchInterval: 60_000, // SSE fallback
+  });
+}
+
+// ================================================================
+// STEP 8: 운영팀 확인 처리
+// ================================================================
+
+export function useOperationsConfirm(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: OperationsConfirmBody) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/operations-confirm`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['operations-pending'] });
+      qc.setQueryData(['facility-request', requestId], updated);
+    },
+  });
+}
+
+// ================================================================
 // STEP 7: 작업 완료 등록
 // ================================================================
 
@@ -143,6 +282,23 @@ export function useCompleteWork(requestId: string) {
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
       qc.setQueryData(['facility-request', requestId], updated);
+    },
+  });
+}
+
+// ================================================================
+// STEP 9: QC 완료 이력
+// ================================================================
+
+export function useQcHistory(branchId?: string | null) {
+  return useQuery({
+    queryKey: ['qc-history', branchId],
+    queryFn: async () => {
+      const params = branchId ? `?branchId=${branchId}` : '';
+      const { data } = await apiClient.get<ApiResponse<QcHistoryCard[]>>(
+        `/facility-requests/qc-history${params}`,
+      );
+      return data.data;
     },
   });
 }

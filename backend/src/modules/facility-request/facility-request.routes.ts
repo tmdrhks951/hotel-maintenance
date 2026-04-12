@@ -13,7 +13,17 @@ import {
   updateScheduleHandler,
   assignWorkerHandler,
   completeWorkHandler,
+  getQcCompletedHandler,
+  qcVerifyHandler,
+  getOperationsPendingHandler,
+  operationsConfirmHandler,
+  getQcHistoryHandler,
 } from './facility-request.controller';
+import {
+  getCommentsHandler,
+  createCommentHandler,
+  deleteCommentHandler,
+} from '../comment/comment.controller';
 
 const router = Router();
 
@@ -29,6 +39,15 @@ router.get('/duplicate-check', duplicateCheckHandler);
 
 // GET /facility-requests/qc-queue  (STEP 6 — QC/ADMIN)
 router.get('/qc-queue', authorize(Role.QC, Role.ADMIN), getQcQueueHandler);
+
+// GET /facility-requests/qc-completed  (STEP 8 — QC/ADMIN)
+router.get('/qc-completed', authorize(Role.QC, Role.ADMIN), getQcCompletedHandler);
+
+// GET /facility-requests/operations-pending  (STEP 8 — OPERATIONS/ADMIN)
+router.get('/operations-pending', authorize(Role.OPERATIONS, Role.ADMIN), getOperationsPendingHandler);
+
+// GET /facility-requests/qc-history  (STEP 9 — QC/ADMIN)
+router.get('/qc-history', authorize(Role.QC, Role.ADMIN), getQcHistoryHandler);
 
 // POST /facility-requests  (STEP 5 — multipart/form-data)
 router.post(
@@ -48,8 +67,8 @@ router.post(
 // /:id 파라미터 경로
 // ----------------------------------------------------------------
 
-// GET /facility-requests/:id  (STEP 6 — QC/ADMIN)
-router.get('/:id', authorize(Role.QC, Role.ADMIN), getFacilityRequestDetailHandler);
+// GET /facility-requests/:id  (STEP 6/8 — QC/OPERATIONS/ADMIN)
+router.get('/:id', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), getFacilityRequestDetailHandler);
 
 // PATCH /facility-requests/:id/qc-review  (STEP 6 — QC/ADMIN)
 router.patch('/:id/qc-review', authorize(Role.QC, Role.ADMIN), qcReviewHandler);
@@ -59,6 +78,12 @@ router.patch('/:id/schedule', authorize(Role.QC, Role.ADMIN), updateScheduleHand
 
 // PATCH /facility-requests/:id/assign  (STEP 6 — QC/ADMIN)
 router.patch('/:id/assign', authorize(Role.QC, Role.ADMIN), assignWorkerHandler);
+
+// PATCH /facility-requests/:id/qc-verify  (STEP 8 — QC/ADMIN)
+router.patch('/:id/qc-verify', authorize(Role.QC, Role.ADMIN), qcVerifyHandler);
+
+// PATCH /facility-requests/:id/operations-confirm  (STEP 8 — OPERATIONS/ADMIN)
+router.patch('/:id/operations-confirm', authorize(Role.OPERATIONS, Role.ADMIN), operationsConfirmHandler);
 
 // POST /facility-requests/:id/complete  (STEP 7 — QC/ADMIN, multipart/form-data)
 router.post(
@@ -74,5 +99,18 @@ router.post(
   },
   completeWorkHandler,
 );
+
+// ----------------------------------------------------------------
+// 댓글 (STEP 9) — 모든 인증 사용자
+// ----------------------------------------------------------------
+
+// GET /facility-requests/:id/comments
+router.get('/:id/comments', getCommentsHandler);
+
+// POST /facility-requests/:id/comments
+router.post('/:id/comments', createCommentHandler);
+
+// DELETE /facility-requests/:id/comments/:commentId
+router.delete('/:id/comments/:commentId', deleteCommentHandler);
 
 export default router;

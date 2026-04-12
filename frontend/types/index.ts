@@ -185,7 +185,7 @@ export interface FacilityRequestCard extends FacilityRequest {
   assignedTo: { id: string; name: string } | null;
 }
 
-// STEP 6+7: 요청 상세 — StatusLog, media, emergencySetBy, completedBy 포함
+// STEP 6+7+8: 요청 상세
 export interface FacilityRequestDetail extends FacilityRequestCard {
   emergencyReason: string | null;
   emergencySetAt: string | null;
@@ -195,6 +195,13 @@ export interface FacilityRequestDetail extends FacilityRequestCard {
   completedAt: string | null;
   completedById: string | null;
   completedBy: { id: string; name: string } | null;
+  // STEP 8
+  qcVerifiedById: string | null;
+  qcVerifiedAt: string | null;
+  qcVerifiedBy: { id: string; name: string } | null;
+  operationsConfirmedByUserId: string | null;
+  operationsConfirmedAt: string | null;
+  operationsConfirmedBy: { id: string; name: string } | null;
   media: Media[];
   statusLogs: StatusLog[];
 }
@@ -204,6 +211,70 @@ export interface QcQueue {
   newRequests: FacilityRequestCard[];
   reviewRequired: FacilityRequestCard[];
   inProgress: FacilityRequestCard[];
+}
+
+// STEP 9: QC 완료 이력 카드 (완료된 요청, 댓글 수 포함)
+export interface QcHistoryCard {
+  id: string;
+  title: string;
+  status: FacilityRequestStatus;
+  category: RequestCategory;
+  updatedAt: string;
+  completedAt: string | null;
+  operationsConfirmedAt: string | null;
+  branch: { id: string; name: string; code: string };
+  location: { id: string; name: string; code: string | null; type: LocationType } | null;
+  completedBy: { id: string; name: string } | null;
+  operationsConfirmedBy: { id: string; name: string } | null;
+  _count: { comments: number };
+}
+
+// STEP 8: QC 완료 큐 응답
+export interface QcCompletedQueue {
+  doneByQc: FacilityRequestCard[];
+}
+
+// STEP 8: 운영팀 확인 큐 카드 (timestamp 포함)
+export interface OperationsCard extends FacilityRequestCard {
+  completedAt: string | null;
+  qcVerifiedAt: string | null;
+  qcVerifiedBy: { id: string; name: string } | null;
+  operationsConfirmedAt: string | null;
+  operationsConfirmedBy: { id: string; name: string } | null;
+}
+
+// STEP 8: 운영팀 확인 큐 응답
+export interface OperationsPendingQueue {
+  pending: OperationsCard[];
+  recentClosed: OperationsCard[];
+}
+
+// 작업 이력 아이템 (달력·키워드 검색용)
+export interface WorkHistoryItem {
+  id: string;
+  title: string;
+  description: string;
+  status: FacilityRequestStatus;
+  category: RequestCategory;
+  isEmergency: boolean;
+  completedAt: string | null;
+  qcVerifiedAt: string | null;
+  operationsConfirmedAt: string | null;
+  plannedWorkDate: string | null;
+  branch:   { id: string; name: string; code: string };
+  location: { id: string; name: string; code: string | null } | null;
+  assignedTo:            { id: string; name: string } | null;
+  completedBy:           { id: string; name: string } | null;
+  qcVerifiedBy:          { id: string; name: string } | null;
+  operationsConfirmedBy: { id: string; name: string } | null;
+}
+
+// 운영팀 대시보드 응답 (4개 섹션)
+export interface OperationsDashboard {
+  requested: OperationsCard[];
+  scheduled: OperationsCard[];
+  today: OperationsCard[];
+  completed: OperationsCard[];
 }
 
 // STEP 6+7: QC 판단 body
@@ -314,6 +385,38 @@ export function generateCompletionText(
   return `${prefix}${item} 완료`;
 }
 
+// ----------------------------------------------------------------
+// STEP 9: 댓글
+// ----------------------------------------------------------------
+
+export interface Comment {
+  id: string;
+  content: string;
+  depth: number;
+  requestId: string;
+  parentId: string | null;
+  rootId: string | null;
+  author: { id: string; name: string; role: Role };
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CommentNode extends Comment {
+  children: CommentNode[];
+}
+
+// STEP 8: QC 최종 검토 body
+export interface QcVerifyBody {
+  action: 'VERIFY' | 'REOPEN';
+  note?: string;
+}
+
+// STEP 8: 운영팀 확인 body
+export interface OperationsConfirmBody {
+  note?: string;
+}
+
 // STEP 7: 완료 등록 body (FormData로 전송)
 export interface CompleteWorkBody {
   workAction: string;
@@ -340,6 +443,146 @@ export interface DuplicateCheckResult {
 export interface CreateFacilityRequestResult {
   facilityRequest: FacilityRequest;
   media: Media | null;
+}
+
+// ----------------------------------------------------------------
+// STEP 10: 알림
+// ----------------------------------------------------------------
+
+export type NotificationType =
+  | 'FACILITY_REQUEST_CREATED'
+  | 'COMMENT_CREATED'
+  | 'STATUS_CHANGED'
+  | 'EMERGENCY_SET'
+  | 'WORKER_ASSIGNED'
+  | 'REQUEST_REOPENED'
+  | 'OPERATIONS_CONFIRM_REQUESTED';
+
+export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
+  FACILITY_REQUEST_CREATED: '새 요청',
+  COMMENT_CREATED: '새 댓글',
+  STATUS_CHANGED: '상태 변경',
+  EMERGENCY_SET: '긴급 전환',
+  WORKER_ASSIGNED: '작업일정 조율',
+  REQUEST_REOPENED: '재오픈',
+  OPERATIONS_CONFIRM_REQUESTED: '작업완료',
+};
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string | null;
+  requestId: string | null;
+  bundleKey: string | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  request: { plannedWorkDate: string | null } | null;
+}
+
+// ----------------------------------------------------------------
+// STEP 10: KPI / 예외관리
+// ----------------------------------------------------------------
+
+export interface KpiSummary {
+  total: number;
+  totalOpen: number;
+  closedCount: number;
+  emergencyOpen: number;
+  avgClosureHours: number | null;
+  reopenRate: number;
+  everReopenedCount: number;
+  repeatIssuesCount: number;
+}
+
+export interface AgingRequest {
+  id: string;
+  title: string;
+  status: FacilityRequestStatus;
+  category: RequestCategory;
+  isEmergency: boolean;
+  priority: Priority;
+  createdAt: string;
+  updatedAt: string;
+  agingDays: number;
+  branch: { id: string; name: string; code: string };
+  location: { id: string; name: string; code: string | null; type: LocationType } | null;
+  assignedTo: { id: string; name: string } | null;
+}
+
+export interface ReopenedResult {
+  total: number;
+  requests: Array<{
+    id: string;
+    title: string;
+    status: FacilityRequestStatus;
+    category: RequestCategory;
+    isEmergency: boolean;
+    createdAt: string;
+    updatedAt: string;
+    branch: { id: string; name: string; code: string };
+    location: { id: string; name: string } | null;
+  }>;
+}
+
+export interface RepeatIssue {
+  locationId: string | null;
+  location: {
+    id: string;
+    name: string;
+    code: string | null;
+    type: LocationType;
+    branch: { id: string; name: string };
+  } | null;
+  category: RequestCategory;
+  count: number;
+}
+
+export interface AdminFilters {
+  branchId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+// ----------------------------------------------------------------
+// 사용자 관리 (ADMIN)
+// ----------------------------------------------------------------
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  position: Position;
+  isActive: boolean;
+  branchId: string | null;
+  branch: { id: string; name: string; code: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateUserBody {
+  email: string;
+  password: string;
+  name: string;
+  role: Role;
+  position?: Position;
+  branchId?: string;
+}
+
+export interface UpdateUserBody {
+  name?: string;
+  role?: Role;
+  position?: Position;
+  branchId?: string | null;
+  isActive?: boolean;
+}
+
+export interface ListUsersQuery {
+  role?: Role;
+  branchId?: string;
+  isActive?: boolean;
 }
 
 // ----------------------------------------------------------------

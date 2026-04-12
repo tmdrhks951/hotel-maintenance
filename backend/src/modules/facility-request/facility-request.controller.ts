@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { RequestCategory } from '@prisma/client';
 import { AppError } from '@/common/errors/AppError';
 import * as facilityRequestService from './facility-request.service';
-import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto } from './facility-request.dto';
+import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto, QcVerifyDto, OperationsConfirmDto } from './facility-request.dto';
 
 // ================================================================
 // GET /api/v1/facility-requests/duplicate-check
@@ -322,6 +322,171 @@ export async function assignWorkerHandler(
       user.role,
       user.branchId,
       dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// GET /api/v1/facility-requests/qc-completed  (STEP 8)
+// ================================================================
+
+export async function getQcCompletedHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const filterBranchId =
+      typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
+
+    const result = await facilityRequestService.getQcCompleted(
+      user.role,
+      user.branchId,
+      filterBranchId,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id/qc-verify  (STEP 8)
+// ================================================================
+
+export async function qcVerifyHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as QcVerifyDto;
+
+    if (!dto.action || !['VERIFY', 'REOPEN'].includes(dto.action)) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'action은 VERIFY 또는 REOPEN이어야 합니다' },
+      });
+      return;
+    }
+
+    const result = await facilityRequestService.qcVerify(
+      req.params.id,
+      user.id,
+      user.role,
+      user.branchId,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// GET /api/v1/facility-requests/operations-pending  (STEP 8)
+// ================================================================
+
+export async function getOperationsPendingHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const filterBranchId =
+      typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
+
+    const result = await facilityRequestService.getOperationsPending(
+      user.role,
+      user.branchId,
+      filterBranchId,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id/operations-confirm  (STEP 8)
+// ================================================================
+
+export async function operationsConfirmHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as OperationsConfirmDto;
+
+    const result = await facilityRequestService.operationsConfirm(
+      req.params.id,
+      user.id,
+      user.role,
+      user.branchId,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// GET /api/v1/facility-requests/qc-history  (STEP 9)
+// ================================================================
+
+export async function getQcHistoryHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const filterBranchId =
+      typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
+
+    const result = await facilityRequestService.getQcHistory(
+      user.role,
+      user.branchId,
+      filterBranchId,
     );
 
     res.status(200).json({ success: true, data: result });

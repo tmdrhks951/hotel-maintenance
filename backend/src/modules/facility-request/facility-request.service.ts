@@ -1,12 +1,15 @@
 import { FacilityRequestStatus } from '@prisma/client';
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
+import { fanOut, getQcUserIds, getOperationsUserIds } from '../notification/notification.service';
 import type {
   CreateFacilityRequestDto,
   QcReviewDto,
   UpdateScheduleDto,
   AssignWorkerDto,
   CompleteWorkDto,
+  QcVerifyDto,
+  OperationsConfirmDto,
 } from './facility-request.dto';
 
 // ================================================================
@@ -81,6 +84,13 @@ function assertQcAccess(role: string): void {
   }
 }
 
+/** OPERATIONS/ADMIN 전용 액션 접근 제어 (STEP 8) */
+function assertOperationsAccess(role: string): void {
+  if (role !== 'OPERATIONS' && role !== 'ADMIN') {
+    throw new AppError('운영팀 또는 ADMIN만 접근 가능합니다', 403, true, 'FORBIDDEN');
+  }
+}
+
 /** QC의 지점 접근 제어 — ADMIN은 모든 지점 허용 */
 function assertQcBranchAccess(
   role: string,
@@ -114,6 +124,10 @@ const REQUEST_DETAIL_SELECT = {
   assignedToId: true,
   completedAt: true,
   completedById: true,
+  qcVerifiedById: true,
+  qcVerifiedAt: true,
+  operationsConfirmedByUserId: true,
+  operationsConfirmedAt: true,
   createdAt: true,
   updatedAt: true,
   branch: { select: { id: true, name: true, code: true } },
@@ -122,6 +136,8 @@ const REQUEST_DETAIL_SELECT = {
   assignedTo: { select: { id: true, name: true, role: true } },
   emergencySetBy: { select: { id: true, name: true } },
   completedBy: { select: { id: true, name: true } },
+  qcVerifiedBy: { select: { id: true, name: true } },
+  operationsConfirmedBy: { select: { id: true, name: true } },
   media: {
     select: { id: true, url: true, filename: true, phase: true, type: true },
     orderBy: { createdAt: 'asc' as const },
@@ -265,6 +281,19 @@ export async function createFacilityRequest(
     return { request, media };
   });
 
+  // STEP 10: QC팀에게 신규 요청 알림 (fire-and-forget)
+  getQcUserIds(dto.branchId)
+    .then((qcIds) =>
+      fanOut({
+        type: 'FACILITY_REQUEST_CREATED',
+        recipientIds: qcIds,
+        requestId: result.request.id,
+        title: `새 요청: ${result.request.title}`,
+        bundleKey: `branch:${dto.branchId}:new_requests`,
+      }),
+    )
+    .catch(() => {}); // 알림 실패는 메인 흐름에 영향 없음
+
   return {
     facilityRequest: result.request,
     media: result.media,
@@ -346,7 +375,10 @@ export async function getFacilityRequestDetail(
   role: string,
   userBranchId: string | null,
 ) {
-  assertQcAccess(role);
+  // QC, OPERATIONS, ADMIN 모두 접근 가능
+  if (role !== 'QC' && role !== 'OPERATIONS' && role !== 'ADMIN') {
+    throw new AppError('접근 권한이 없습니다', 403, true, 'FORBIDDEN');
+  }
 
   const request = await prisma.facilityRequest.findFirst({
     where: { id: requestId, deletedAt: null },
@@ -357,6 +389,7 @@ export async function getFacilityRequestDetail(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
+  // ADMIN은 모든 지점 접근 허용
   assertQcBranchAccess(role, userBranchId, request.branchId);
 
   return request;
@@ -377,7 +410,14 @@ export async function qcReview(
 
   const request = await prisma.facilityRequest.findFirst({
     where: { id: requestId, deletedAt: null },
-    select: { id: true, status: true, branchId: true, plannedWorkDate: true },
+    select: {
+      id: true,
+      status: true,
+      branchId: true,
+      plannedWorkDate: true,
+      isEmergency: true,
+      assignedToId: true,
+    },
   });
 
   if (!request) {
@@ -447,6 +487,22 @@ export async function qcReview(
 
     return req;
   });
+
+  // STEP 10: 긴급 전환 알림 (false → true 변경 시만)
+  if (dto.isEmergency === true && !request.isEmergency) {
+    getQcUserIds(request.branchId)
+      .then((qcIds) => {
+        const recipients = [...new Set([...qcIds, ...(request.assignedToId ? [request.assignedToId] : [])])];
+        return fanOut({
+          type: 'EMERGENCY_SET',
+          recipientIds: recipients,
+          requestId,
+          title: `긴급 전환: ${updated.title}`,
+          message: dto.emergencyReason,
+        });
+      })
+      .catch(() => {});
+  }
 
   return updated;
 }
@@ -588,6 +644,14 @@ export async function assignWorker(
     select: REQUEST_DETAIL_SELECT,
   });
 
+  // STEP 10: 담당자에게 배정 알림
+  fanOut({
+    type: 'WORKER_ASSIGNED',
+    recipientIds: [dto.assignedToId],
+    requestId,
+    title: `담당 배정: ${updated.title}`,
+  }).catch(() => {});
+
   return updated;
 }
 
@@ -666,6 +730,345 @@ export async function completeWork(
         fromStatus: 'IN_PROGRESS',
         toStatus: 'DONE_BY_QC',
         reason: completionReason,
+        changedById: userId,
+      },
+    });
+
+    return req;
+  });
+
+  return updated;
+}
+
+// ================================================================
+// STEP 8: getQcCompleted — QC 완료 큐 (DONE_BY_QC 항목)
+// ================================================================
+
+export async function getQcCompleted(
+  role: string,
+  userBranchId: string | null,
+  filterBranchId?: string,
+) {
+  assertQcAccess(role);
+
+  let branchId: string | undefined;
+  if (role === 'QC') {
+    branchId = userBranchId ?? undefined;
+  } else if (filterBranchId) {
+    branchId = filterBranchId;
+  }
+
+  const baseWhere = {
+    deletedAt: null,
+    ...(branchId ? { branchId } : {}),
+  };
+
+  const cardSelect = {
+    id: true,
+    title: true,
+    description: true,
+    status: true,
+    category: true,
+    isEmergency: true,
+    priority: true,
+    plannedWorkDate: true,
+    scheduleChangeCount: true,
+    completedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    branch: { select: { id: true, name: true, code: true } },
+    location: { select: { id: true, name: true, code: true } },
+    createdBy: { select: { id: true, name: true } },
+    assignedTo: { select: { id: true, name: true } },
+    completedBy: { select: { id: true, name: true } },
+  } as const;
+
+  const doneByQc = await prisma.facilityRequest.findMany({
+    where: { ...baseWhere, status: 'DONE_BY_QC' },
+    select: cardSelect,
+    orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'desc' }],
+  });
+
+  return { doneByQc };
+}
+
+// ================================================================
+// STEP 8: qcVerify — QC 최종 검토 (DONE_BY_QC → QC_VERIFIED | REOPENED)
+// ================================================================
+
+export async function qcVerify(
+  requestId: string,
+  userId: string,
+  role: string,
+  userBranchId: string | null,
+  dto: QcVerifyDto,
+) {
+  assertQcAccess(role);
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, status: true, branchId: true, createdById: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  if (request.status !== 'DONE_BY_QC') {
+    throw new AppError(
+      'QC 완료 상태에서만 최종 검토가 가능합니다',
+      400,
+      true,
+      'INVALID_STATUS',
+    );
+  }
+
+  const newStatus = dto.action === 'VERIFY' ? 'QC_VERIFIED' : 'REOPENED';
+  assertValidTransition(request.status, newStatus);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const updateData: Record<string, unknown> = { status: newStatus };
+    if (dto.action === 'VERIFY') {
+      updateData.qcVerifiedById = userId;
+      updateData.qcVerifiedAt = new Date();
+    }
+
+    const req = await tx.facilityRequest.update({
+      where: { id: requestId },
+      data: updateData,
+      select: REQUEST_DETAIL_SELECT,
+    });
+
+    await tx.statusLog.create({
+      data: {
+        requestId,
+        fromStatus: 'DONE_BY_QC',
+        toStatus: newStatus as FacilityRequestStatus,
+        reason: dto.note ?? (dto.action === 'VERIFY' ? 'QC 최종 검토 완료' : '재오픈'),
+        changedById: userId,
+      },
+    });
+
+    return req;
+  });
+
+  // STEP 10: 알림 — 상태에 따라 fan-out
+  if (dto.action === 'VERIFY') {
+    // 운영팀에게 확인 요청 알림
+    getOperationsUserIds(request.branchId)
+      .then((opsIds) =>
+        fanOut({
+          type: 'OPERATIONS_CONFIRM_REQUESTED',
+          recipientIds: opsIds,
+          requestId,
+          title: `운영팀 확인 요청: ${updated.title}`,
+        }),
+      )
+      .catch(() => {});
+  } else if (dto.action === 'REOPEN') {
+    // QC + 요청 생성자에게 재오픈 알림
+    getQcUserIds(request.branchId)
+      .then((qcIds) => {
+        const recipients = [...new Set([...qcIds, request.createdById])];
+        return fanOut({
+          type: 'REQUEST_REOPENED',
+          recipientIds: recipients,
+          requestId,
+          title: `재오픈: ${updated.title}`,
+          message: dto.note,
+        });
+      })
+      .catch(() => {});
+  }
+
+  return updated;
+}
+
+// ================================================================
+// STEP 8: getOperationsPending — 운영팀 확인 큐
+// ================================================================
+
+export async function getOperationsPending(
+  role: string,
+  userBranchId: string | null,
+  filterBranchId?: string,
+) {
+  assertOperationsAccess(role);
+
+  let branchId: string | undefined;
+  if (role === 'OPERATIONS') {
+    branchId = userBranchId ?? undefined;
+  } else if (filterBranchId) {
+    branchId = filterBranchId;
+  }
+
+  const baseWhere = {
+    deletedAt: null,
+    ...(branchId ? { branchId } : {}),
+  };
+
+  const cardSelect = {
+    id: true,
+    title: true,
+    description: true,
+    status: true,
+    category: true,
+    isEmergency: true,
+    priority: true,
+    plannedWorkDate: true,
+    scheduleChangeCount: true,
+    completedAt: true,
+    qcVerifiedAt: true,
+    operationsConfirmedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    branch: { select: { id: true, name: true, code: true } },
+    location: { select: { id: true, name: true, code: true } },
+    createdBy: { select: { id: true, name: true } },
+    assignedTo: { select: { id: true, name: true } },
+    completedBy: { select: { id: true, name: true } },
+    qcVerifiedBy: { select: { id: true, name: true } },
+    operationsConfirmedBy: { select: { id: true, name: true } },
+  } as const;
+
+  const [pending, recentClosed] = await Promise.all([
+    prisma.facilityRequest.findMany({
+      where: { ...baseWhere, status: 'QC_VERIFIED' },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'asc' }],
+    }),
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        status: 'CLOSED',
+        operationsConfirmedAt: { not: null },
+      },
+      select: cardSelect,
+      orderBy: { operationsConfirmedAt: 'desc' },
+      take: 20,
+    }),
+  ]);
+
+  return { pending, recentClosed };
+}
+
+// ================================================================
+// STEP 9: getQcHistory — QC가 처리한 완료 이력 (CLOSED, 댓글 수 포함)
+// ================================================================
+
+export async function getQcHistory(
+  role: string,
+  userBranchId: string | null,
+  filterBranchId?: string,
+) {
+  assertQcAccess(role);
+
+  let branchId: string | undefined;
+  if (role === 'QC') {
+    branchId = userBranchId ?? undefined;
+  } else if (filterBranchId) {
+    branchId = filterBranchId;
+  }
+
+  return prisma.facilityRequest.findMany({
+    where: {
+      deletedAt: null,
+      status: 'CLOSED',
+      ...(branchId ? { branchId } : {}),
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      category: true,
+      updatedAt: true,
+      completedAt: true,
+      operationsConfirmedAt: true,
+      branch: { select: { id: true, name: true, code: true } },
+      location: { select: { id: true, name: true, code: true, type: true } },
+      completedBy: { select: { id: true, name: true } },
+      operationsConfirmedBy: { select: { id: true, name: true } },
+      _count: {
+        select: {
+          comments: { where: { deletedAt: null } },
+        },
+      },
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 50,
+  });
+}
+
+// ================================================================
+// STEP 8: operationsConfirm — 운영팀 확인 (QC_VERIFIED → CONFIRMED → CLOSED)
+// ================================================================
+
+export async function operationsConfirm(
+  requestId: string,
+  userId: string,
+  role: string,
+  userBranchId: string | null,
+  dto: OperationsConfirmDto,
+) {
+  assertOperationsAccess(role);
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, status: true, branchId: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  if (request.status !== 'QC_VERIFIED') {
+    throw new AppError(
+      'QC 검토 완료 상태에서만 운영팀 확인이 가능합니다',
+      400,
+      true,
+      'INVALID_STATUS',
+    );
+  }
+
+  assertValidTransition('QC_VERIFIED', 'OPERATIONS_CONFIRMED');
+  assertValidTransition('OPERATIONS_CONFIRMED', 'CLOSED');
+
+  const now = new Date();
+  const confirmNote = dto.note?.trim() ?? '운영팀 확인 완료';
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const req = await tx.facilityRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'CLOSED',
+        operationsConfirmedByUserId: userId,
+        operationsConfirmedAt: now,
+      },
+      select: REQUEST_DETAIL_SELECT,
+    });
+
+    // 1차: QC_VERIFIED → OPERATIONS_CONFIRMED
+    await tx.statusLog.create({
+      data: {
+        requestId,
+        fromStatus: 'QC_VERIFIED',
+        toStatus: 'OPERATIONS_CONFIRMED',
+        reason: confirmNote,
+        changedById: userId,
+      },
+    });
+
+    // 2차: OPERATIONS_CONFIRMED → CLOSED
+    await tx.statusLog.create({
+      data: {
+        requestId,
+        fromStatus: 'OPERATIONS_CONFIRMED',
+        toStatus: 'CLOSED',
+        reason: confirmNote,
         changedById: userId,
       },
     });
