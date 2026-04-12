@@ -105,10 +105,18 @@ function NotificationCard({
       ? 'border-gray-200 bg-white opacity-50'   // 읽음: 채도 제거
       : 'border-blue-400 bg-blue-100';           // 미읽음: 선명한 파랑
 
+  // 카드 전체를 클릭했을 때: 읽음 처리 + requestId 있으면 해당 페이지로 이동
+  function handleCardClick() {
+    if (!item.isRead) onRead(item.id);
+    if (item.requestId) {
+      window.location.href = requestLink;
+    }
+  }
+
   return (
     <div
-      onClick={() => { if (!item.isRead) onRead(item.id); }}
-      className={`p-4 rounded-lg border transition-colors ${cardClass} ${!item.isRead ? 'cursor-pointer' : ''}`}
+      onClick={handleCardClick}
+      className={`p-4 rounded-lg border transition-colors cursor-pointer hover:brightness-95 ${cardClass}`}
     >
       <div className="flex items-start gap-3">
         <span className="text-xl flex-shrink-0 mt-0.5">{typeIcon(item.type)}</span>
@@ -135,25 +143,10 @@ function NotificationCard({
           {item.message && (
             <p className="mt-0.5 text-xs text-gray-500">{item.message}</p>
           )}
-          <div className="mt-2 flex items-center gap-3">
-            {item.requestId && (
-              <a
-                href={requestLink}
-                onClick={() => { if (!item.isRead) onRead(item.id); }}
-                className="text-xs text-blue-600 hover:text-blue-700"
-              >
-                요청 보기 →
-              </a>
-            )}
-            {!item.isRead && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onRead(item.id); }}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
-                읽음 처리
-              </button>
-            )}
-          </div>
+          {/* requestId 있을 때만 이동 안내 텍스트 표시 */}
+          {item.requestId && (
+            <p className="mt-2 text-xs text-blue-500">탭하여 목록 확인 →</p>
+          )}
         </div>
       </div>
     </div>
