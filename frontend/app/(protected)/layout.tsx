@@ -51,8 +51,9 @@ function getNavItems(role: string): NavItem[] {
   switch (role) {
     case 'OPERATIONS':
       return [
-        { href: '/camera',     label: '요청 등록' },
-        { href: '/operations', label: '작업 확인' },
+        { href: '/camera',          label: '요청 등록' },
+        { href: '/operations',      label: '작업 확인' },
+        { href: '/admin/reports',   label: '리포트' },
       ];
     case 'QC':
       return [
@@ -60,11 +61,12 @@ function getNavItems(role: string): NavItem[] {
       ];
     case 'ADMIN':
       return [
-        { href: '/branches',    label: '지점 관리' },
-        { href: '/qc',          label: 'QC 큐' },
-        { href: '/operations',  label: '작업 확인' },
-        { href: '/admin/users', label: '사용자' },
-        { href: '/admin',       label: '관리' },
+        { href: '/branches',        label: '지점 관리' },
+        { href: '/qc',              label: 'QC 큐' },
+        { href: '/operations',      label: '작업 확인' },
+        { href: '/admin/reports',   label: '리포트' },
+        { href: '/admin/users',     label: '사용자' },
+        { href: '/admin',           label: '관리' },
       ];
     default:
       return [];
