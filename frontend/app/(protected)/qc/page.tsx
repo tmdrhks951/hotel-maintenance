@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useEscKey } from '@/hooks/useEscKey';
 import { useAppStore } from '@/stores/appStore';
+import { useBranches } from '@/hooks/useBranches';
 import {
   useQcQueue,
   useQcCompleted,
@@ -22,6 +23,7 @@ import type {
   Priority,
   QcReviewAction,
   WorkAction,
+  RequestCategory,
 } from '@/types';
 import {
   REQUEST_CATEGORY_LABEL,
@@ -80,6 +82,42 @@ function PriorityBadge({ priority }: { priority: Priority }) {
 
 // ================================================================
 // 요청 카드
+// ================================================================
+
+// ================================================================
+// 필터 / 정렬 헬퍼
+// ================================================================
+
+type SortKey = 'newest' | 'oldest' | 'priority';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  newest:   '최신순',
+  oldest:   '오래된순',
+  priority: '긴급우선',
+};
+
+const PRIORITY_SCORE: Record<string, number> = { URGENT: 3, HIGH: 2, NORMAL: 1 };
+
+function applyFiltersAndSort(
+  items: FacilityRequestCard[],
+  category: RequestCategory | 'all',
+  sort: SortKey,
+): FacilityRequestCard[] {
+  let result = category === 'all' ? items : items.filter((r) => r.category === category);
+  return [...result].sort((a, b) => {
+    if (sort === 'priority') {
+      const scoreA = (a.isEmergency ? 10 : 0) + (PRIORITY_SCORE[a.priority] ?? 0);
+      const scoreB = (b.isEmergency ? 10 : 0) + (PRIORITY_SCORE[b.priority] ?? 0);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+    }
+    const ta = new Date(a.createdAt).getTime();
+    const tb = new Date(b.createdAt).getTime();
+    return sort === 'oldest' ? ta - tb : tb - ta;
+  });
+}
+
+// ================================================================
+// 카드 색상
 // ================================================================
 
 function requestCardColor(req: FacilityRequestCard, selected: boolean): string {
@@ -952,12 +990,18 @@ function RequestDetailModal({
 
 export default function QcPage() {
   const { user } = useAppStore();
-  const [selectedId,  setSelectedId]  = useState<string | null>(null);
-  const [viewMode,    setViewMode]    = useState<'queue' | 'history'>('queue');
-  const [showHistory, setShowHistory] = useState(false);
+  const [selectedId,    setSelectedId]    = useState<string | null>(null);
+  const [viewMode,      setViewMode]      = useState<'queue' | 'history'>('queue');
+  const [showHistory,   setShowHistory]   = useState(false);
+  const [filterBranch,  setFilterBranch]  = useState<string>('');          // ADMIN 지점 필터
+  const [filterCategory,setFilterCategory]= useState<RequestCategory | 'all'>('all');
+  const [sortBy,        setSortBy]        = useState<SortKey>('newest');
 
-  // QC는 자신의 지점만, ADMIN은 전체
-  const branchId = user?.role === 'QC' ? user.branchId : undefined;
+  // 지점 목록 (ADMIN 전용)
+  const { data: branches = [] } = useBranches(true);
+
+  // QC는 자신의 지점만, ADMIN은 선택한 지점(없으면 전체)
+  const branchId = user?.role === 'QC' ? user.branchId : (filterBranch || undefined);
   const { data, isLoading, error, refetch } = useQcQueue(branchId);
   const { data: completedData, refetch: refetchCompleted } = useQcCompleted(branchId);
   const { data: historyData = [], refetch: refetchHistory } = useQcHistory(branchId);
@@ -970,10 +1014,10 @@ export default function QcPage() {
     );
   }
 
-  const newRequests = data?.newRequests ?? [];
-  const reviewRequired = data?.reviewRequired ?? [];
-  const inProgress = data?.inProgress ?? [];
-  const doneByQc = completedData?.doneByQc ?? [];
+  const newRequests    = useMemo(() => applyFiltersAndSort(data?.newRequests    ?? [], filterCategory, sortBy), [data, filterCategory, sortBy]);
+  const reviewRequired = useMemo(() => applyFiltersAndSort(data?.reviewRequired ?? [], filterCategory, sortBy), [data, filterCategory, sortBy]);
+  const inProgress     = useMemo(() => applyFiltersAndSort(data?.inProgress     ?? [], filterCategory, sortBy), [data, filterCategory, sortBy]);
+  const doneByQc       = useMemo(() => applyFiltersAndSort(completedData?.doneByQc ?? [], filterCategory, sortBy), [completedData, filterCategory, sortBy]);
 
   return (
     <div className="h-full">
@@ -1038,6 +1082,69 @@ export default function QcPage() {
           </button>
         </div>
       </div>
+
+      {/* 필터 바 */}
+      {viewMode === 'queue' && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {/* 지점 필터 — ADMIN만 */}
+          {user.role === 'ADMIN' && branches.length > 0 && (
+            <select
+              value={filterBranch}
+              onChange={(e) => { setFilterBranch(e.target.value); setSelectedId(null); }}
+              className="text-xs border border-gray-200 rounded px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-blue-400"
+            >
+              <option value="">전체 지점</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
+
+          {/* 카테고리 칩 */}
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setFilterCategory('all')}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                filterCategory === 'all'
+                  ? 'bg-gray-800 text-white border-gray-800'
+                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+              }`}
+            >
+              전체
+            </button>
+            {(Object.keys(REQUEST_CATEGORY_LABEL) as RequestCategory[]).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFilterCategory(cat)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  filterCategory === cat
+                    ? 'bg-gray-800 text-white border-gray-800'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                {REQUEST_CATEGORY_LABEL[cat]}
+              </button>
+            ))}
+          </div>
+
+          {/* 정렬 */}
+          <div className="ml-auto flex rounded border border-gray-200 overflow-hidden text-xs">
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => setSortBy(key)}
+                className={`px-2.5 py-1.5 transition-colors border-l border-gray-200 first:border-l-0 ${
+                  sortBy === key
+                    ? 'bg-gray-800 text-white'
+                    : 'bg-white text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                {SORT_LABELS[key]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {isLoading && viewMode === 'queue' && (
         <div className="text-center py-20 text-sm text-gray-400">로딩 중...</div>
