@@ -23,6 +23,32 @@ async function main() {
   }
 
   // ================================================================
+  // 1-2. 테스트 계정 생성 (6종)
+  // ================================================================
+  const testAccounts = [
+    { loginId: 'ops.leader', email: 'ops.leader@hotel.com', name: '운영팀장', role: 'OPERATIONS', position: 'TEAM_LEADER', department: 'OPERATIONS_1' },
+    { loginId: 'qc.leader', email: 'qc.leader@hotel.com', name: 'QC팀장', role: 'QC', position: 'TEAM_LEADER', department: 'QC_1' },
+    { loginId: 'ops.member', email: 'ops.member@hotel.com', name: '운영팀원', role: 'OPERATIONS', position: 'MEMBER', department: 'OPERATIONS_1' },
+    { loginId: 'qc.member', email: 'qc.member@hotel.com', name: 'QC팀원', role: 'QC', position: 'MEMBER', department: 'QC_1' },
+    { loginId: 'vendor', email: 'vendor@hotel.com', name: '외부업체', role: 'VENDOR', position: 'OTHER', department: 'NONE' },
+  ];
+
+  const testPwHash = await bcrypt.hash('Test@1234!', 12);
+  for (const acc of testAccounts) {
+    const exists = await prisma.user.findFirst({ where: { loginId: acc.loginId } });
+    if (!exists) {
+      await prisma.user.create({
+        data: {
+          loginId: acc.loginId, email: acc.email, passwordHash: testPwHash,
+          name: acc.name, role: acc.role, position: acc.position, department: acc.department,
+          status: 'APPROVED', isActive: true,
+        },
+      });
+      console.log(`✅ ${acc.name} (${acc.loginId}) created`);
+    }
+  }
+
+  // ================================================================
   // 2. 지점 데이터 확인 — 이미 최신이면 스킵
   // ================================================================
   const marker = await prisma.branch.findFirst({ where: { code: 'GANGNAM' } });
@@ -129,6 +155,25 @@ async function main() {
   }
 
   console.log(`✅ ${roomCount} rooms created`);
+
+  // ================================================================
+  // 6. 팀원 계정에 담당 지점 연결 (명동 1호점)
+  // ================================================================
+  const myeongdong1Id = map['MYEONGDONG1'];
+  if (myeongdong1Id) {
+    const memberAccounts = ['ops.member', 'qc.member'];
+    for (const lid of memberAccounts) {
+      const u = await prisma.user.findFirst({ where: { loginId: lid } });
+      if (u && !u.branchId) {
+        await prisma.user.update({
+          where: { id: u.id },
+          data: { branchId: myeongdong1Id, branchIds: [myeongdong1Id] },
+        });
+        console.log(`✅ ${lid} → 명동 1호점 연결`);
+      }
+    }
+  }
+
   console.log('🎉 Production seed complete!');
 }
 
