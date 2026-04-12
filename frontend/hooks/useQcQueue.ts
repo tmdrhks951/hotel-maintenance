@@ -30,8 +30,8 @@ export function useQcQueue(branchId?: string | null) {
       );
       return data.data;
     },
-    // SSE 실시간 갱신이 주 업데이트 — 폴링은 60초 fallback
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,            // 15초 폴링 (SSE 보조)
+    refetchIntervalInBackground: true,  // 탭이 비활성 상태여도 폴링 유지
   });
 }
 
@@ -68,6 +68,7 @@ export function useQcReview(requestId: string) {
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });
@@ -89,6 +90,7 @@ export function useUpdateSchedule(requestId: string) {
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });
@@ -146,7 +148,8 @@ export function useQcCompleted(branchId?: string | null) {
       );
       return data.data;
     },
-    refetchInterval: 60_000, // SSE fallback
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -167,6 +170,7 @@ export function useQcVerify(requestId: string) {
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
       qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });
@@ -186,7 +190,8 @@ export function useOperationsPending(branchId?: string | null) {
       );
       return data.data;
     },
-    refetchInterval: 60_000, // SSE fallback
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -239,7 +244,8 @@ export function useOperationsDashboard(branchId?: string | null) {
       );
       return data.data;
     },
-    refetchInterval: 60_000, // SSE fallback
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -259,6 +265,7 @@ export function useOperationsConfirm(requestId: string) {
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['operations-pending'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });
@@ -281,6 +288,8 @@ export function useCompleteWork(requestId: string) {
     },
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });

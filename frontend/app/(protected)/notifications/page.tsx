@@ -177,22 +177,14 @@ export default function NotificationsPage() {
   const markReadMutation = useMarkRead();
   const markAllReadMutation = useMarkAllRead();
 
-  // 당일 진행 탭 진입 시 자동 일괄 읽음 처리 (한 번만 실행)
-  const autoReadDoneRef = useRef<boolean>(false);
+  // 페이지 진입 시 전체 읽음 처리 → 벨 뱃지 즉시 소거
+  const autoReadOnMountRef = useRef<boolean>(false);
   useEffect(() => {
-    if (activeFilter !== 'today') {
-      autoReadDoneRef.current = false; // 다른 탭으로 나가면 초기화
-      return;
-    }
-    if (autoReadDoneRef.current || isLoading) return;
-    const unread = allNotifications.filter(
-      (n) => !n.isRead && isToday(n.request?.plannedWorkDate),
-    );
-    if (unread.length === 0) return;
-    autoReadDoneRef.current = true;
-    unread.forEach((n) => markReadMutation.mutate(n.id));
+    if (autoReadOnMountRef.current || isLoading) return;
+    autoReadOnMountRef.current = true;
+    markAllReadMutation.mutate();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter, isLoading]);
+  }, [isLoading]);
 
   const totalUnread = allNotifications.filter((n) => !n.isRead).length;
 

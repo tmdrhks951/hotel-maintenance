@@ -31,44 +31,12 @@ export function useNotificationSSE(enabled = true) {
       console.debug('[SSE] 알림 스트림 연결됨');
     });
 
-    // 새 알림 수신
-    es.addEventListener('notification', (e: MessageEvent) => {
-      // 알림 뱃지 갱신
+    // 새 알림 수신 — 타입 구분 없이 모든 작업 큐 즉시 강제 갱신
+    es.addEventListener('notification', () => {
       qc.invalidateQueries({ queryKey: ['notifications'] });
-
-      // 작업 큐도 갱신 (알림이 상태 전이와 함께 오기 때문)
-      try {
-        const payload = JSON.parse(e.data) as { type?: string };
-        const type = payload.type ?? '';
-
-        // QC 관련 알림 → QC 큐 갱신
-        if (
-          type.includes('ASSIGNED') ||
-          type.includes('SCHEDULED') ||
-          type.includes('REVIEW') ||
-          type.includes('QC')
-        ) {
-          qc.invalidateQueries({ queryKey: ['qc-queue'] });
-          qc.invalidateQueries({ queryKey: ['qc-completed'] });
-        }
-
-        // 운영팀 관련 알림 → 운영팀 대시보드 갱신
-        if (
-          type.includes('COMPLETED') ||
-          type.includes('VERIFIED') ||
-          type.includes('OPERATIONS')
-        ) {
-          qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
-        }
-
-        // 모든 알림 → 안전하게 전체 작업 큐 갱신
-        qc.invalidateQueries({ queryKey: ['qc-queue'] });
-        qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
-      } catch {
-        // JSON 파싱 실패 시 기본 갱신만
-        qc.invalidateQueries({ queryKey: ['qc-queue'] });
-        qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
-      }
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
     });
 
     // ping — 무시 (연결 유지 전용)

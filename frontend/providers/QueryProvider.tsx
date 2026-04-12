@@ -10,8 +10,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 60 * 1000, // 1분
+            staleTime: 0,           // 항상 stale — invalidate 즉시 리페치 보장
             retry: 1,
+            refetchOnWindowFocus: true, // 탭 포커스 복귀 시 자동 갱신
           },
         },
       }),
