@@ -334,13 +334,11 @@ export async function sendCode(phone: string) {
   const code = phoneService.generateCode();
   await phoneService.storeCode(phone, code);
 
-  // TODO: 실제 SMS 발송 연동 (이번 STEP 범위 밖)
-  // 개발 환경에서는 콘솔에 코드 출력
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`📱 [DEV] 인증코드 → ${phone}: ${code}`);
-  }
+  // TODO: 실제 SMS 발송 연동
+  // SMS 연동 전까지는 응답에 코드 포함 (프론트에서 자동입력)
+  console.log(`📱 인증코드 → ${phone}: ${code}`);
 
-  return { message: '인증코드가 발송되었습니다' };
+  return { message: '인증코드가 발송되었습니다', code };
 }
 
 // ================================================================

@@ -172,8 +172,12 @@ export default function SignupPage() {
     setError('');
     setCodeLoading(true);
     try {
-      await apiClient.post('/auth/send-code', { phone: phone.trim() });
+      const { data } = await apiClient.post<ApiResponse<{ message: string; code?: string }>>('/auth/send-code', { phone: phone.trim() });
       setCodeSent(true);
+      // SMS 연동 전 임시: 서버가 code를 반환하면 자동입력
+      if (data.data?.code) {
+        setCode(data.data.code);
+      }
     } catch (e: unknown) {
       setError((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '인증코드 발송 실패');
     } finally {
