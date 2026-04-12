@@ -1121,3 +1121,205 @@ export async function operationsConfirm(
 
   return updated;
 }
+
+// ================================================================
+// Operations 대시보드 — 4개 섹션
+//  requested : RECEIVED (일정 미등록)
+//  scheduled : SCHEDULED (일정 등록)
+//  today     : 금일 진행 (plannedWorkDate = 오늘, IN_PROGRESS/DONE_BY_QC/QC_VERIFIED)
+//  completed : 오늘 완료된 항목 (operationsConfirmedAt = 오늘)
+// ================================================================
+
+export async function getOperationsDashboard(
+  role: string,
+  userBranchId: string | null,
+  filterBranchId?: string,
+) {
+  assertOperationsAccess(role);
+
+  let branchId: string | undefined;
+  if (role === 'OPERATIONS') {
+    branchId = userBranchId ?? undefined;
+  } else if (filterBranchId) {
+    branchId = filterBranchId;
+  }
+
+  const baseWhere = {
+    deletedAt: null,
+    ...(branchId ? { branchId } : {}),
+  };
+
+  const cardSelect = {
+    id: true,
+    title: true,
+    description: true,
+    status: true,
+    category: true,
+    isEmergency: true,
+    priority: true,
+    plannedWorkDate: true,
+    scheduleChangeCount: true,
+    completedAt: true,
+    qcVerifiedAt: true,
+    operationsConfirmedAt: true,
+    createdAt: true,
+    updatedAt: true,
+    branch:                { select: { id: true, name: true, code: true } },
+    location:              { select: { id: true, name: true, code: true } },
+    createdBy:             { select: { id: true, name: true } },
+    assignedTo:            { select: { id: true, name: true } },
+    completedBy:           { select: { id: true, name: true } },
+    qcVerifiedBy:          { select: { id: true, name: true } },
+    operationsConfirmedBy: { select: { id: true, name: true } },
+  } as const;
+
+  // 오늘 날짜 범위 (자정 ~ 다음날 자정)
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const [requested, scheduled, today, completed] = await Promise.all([
+    // 일정 요청 — RECEIVED 상태
+    prisma.facilityRequest.findMany({
+      where: { ...baseWhere, status: 'RECEIVED' },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
+    }),
+
+    // 일정 확정 — SCHEDULED 상태
+    prisma.facilityRequest.findMany({
+      where: { ...baseWhere, status: 'SCHEDULED' },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
+    }),
+
+    // 금일 진행 — 오늘 plannedWorkDate이거나 현재 진행 중인 항목
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] },
+        OR: [
+          { plannedWorkDate: { gte: todayStart, lte: todayEnd } },
+          { plannedWorkDate: null }, // 일정 없이 진행 중인 항목도 포함
+        ],
+      },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'desc' }],
+    }),
+
+    // 작업 완료 — 오늘 운영팀 확인 완료된 항목
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        status: 'CLOSED',
+        operationsConfirmedAt: { gte: todayStart, lte: todayEnd },
+      },
+      select: cardSelect,
+      orderBy: { operationsConfirmedAt: 'desc' },
+    }),
+  ]);
+
+  return { requested, scheduled, today, completed };
+}
+
+// ================================================================
+// 작업 이력 조회 — 달력(날짜별) + 키워드 검색
+//  date      : 특정 날짜 (YYYY-MM-DD) — 해당일에 완료된 항목
+//  startDate/endDate : 날짜 범위
+//  keyword   : 제목/설명 부분 검색
+// ================================================================
+
+interface WorkHistoryParams {
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+  keyword?: string;
+  filterBranchId?: string;
+}
+
+export async function getWorkHistory(
+  role: string,
+  userBranchId: string | null,
+  params: WorkHistoryParams,
+) {
+  // QC, OPERATIONS, ADMIN 모두 접근 가능
+  if (!['QC', 'OPERATIONS', 'ADMIN'].includes(role)) {
+    throw new AppError('권한이 없습니다', 403, true, 'FORBIDDEN');
+  }
+
+  let branchId: string | undefined;
+  if (role === 'QC' || role === 'OPERATIONS') {
+    branchId = userBranchId ?? undefined;
+  } else if (params.filterBranchId) {
+    branchId = params.filterBranchId;
+  }
+
+  // AND 조건 배열 — 각 조건을 독립적으로 구성
+  const AND: object[] = [
+    { deletedAt: null },
+    { status: { in: ['CLOSED', 'OPERATIONS_CONFIRMED'] } },
+    ...(branchId ? [{ branchId }] : []),
+  ];
+
+  // 날짜 필터 — 특정일 또는 범위
+  if (params.date) {
+    const d = new Date(params.date);
+    const start = new Date(d); start.setHours(0, 0, 0, 0);
+    const end   = new Date(d); end.setHours(23, 59, 59, 999);
+    AND.push({
+      OR: [
+        { operationsConfirmedAt: { gte: start, lte: end } },
+        { completedAt:           { gte: start, lte: end } },
+      ],
+    });
+  } else if (params.startDate || params.endDate) {
+    const start = params.startDate ? new Date(params.startDate) : undefined;
+    const end   = params.endDate   ? new Date(params.endDate)   : undefined;
+    if (start) start.setHours(0, 0, 0, 0);
+    if (end)   end.setHours(23, 59, 59, 999);
+    AND.push({
+      OR: [
+        { operationsConfirmedAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } },
+        { completedAt:           { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } },
+      ],
+    });
+  }
+
+  // 키워드 검색
+  if (params.keyword?.trim()) {
+    const kw = params.keyword.trim();
+    AND.push({
+      OR: [
+        { title:       { contains: kw, mode: 'insensitive' } },
+        { description: { contains: kw, mode: 'insensitive' } },
+      ],
+    });
+  }
+
+  const items = await prisma.facilityRequest.findMany({
+    where: { AND } as object,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      category: true,
+      isEmergency: true,
+      completedAt: true,
+      qcVerifiedAt: true,
+      operationsConfirmedAt: true,
+      plannedWorkDate: true,
+      branch:                { select: { id: true, name: true, code: true } },
+      location:              { select: { id: true, name: true, code: true } },
+      assignedTo:            { select: { id: true, name: true } },
+      completedBy:           { select: { id: true, name: true } },
+      qcVerifiedBy:          { select: { id: true, name: true } },
+      operationsConfirmedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { operationsConfirmedAt: 'desc' },
+    take: 100,
+  });
+
+  return items;
+}
