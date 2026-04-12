@@ -6,15 +6,16 @@ import { useAuthStore } from '@/stores/authStore';
 
 /**
  * Floating Action Button — 역할별 빠른 액션.
- * OPERATIONS: 시설요청 등록 / 카메라 / 앨범
- * QC: 작업완료 사진 촬영 / 앨범에서 선택
+ * OPERATIONS: 시설요청 등록 / 사진 촬영 / 영상 촬영 / 앨범
+ * QC: 작업완료 사진 촬영 / 영상 촬영 / 앨범에서 선택
  */
 export default function QuickCreateFab() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
+  const cameraPhotoRef = useRef<HTMLInputElement>(null);
+  const cameraVideoRef = useRef<HTMLInputElement>(null);
   const albumRef = useRef<HTMLInputElement>(null);
 
   // QC, OPERATIONS 역할만 노출
@@ -34,9 +35,14 @@ export default function QuickCreateFab() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [open]);
 
-  function handleCamera() {
+  function handleCameraPhoto() {
     setOpen(false);
-    cameraRef.current?.click();
+    cameraPhotoRef.current?.click();
+  }
+
+  function handleCameraVideo() {
+    setOpen(false);
+    cameraVideoRef.current?.click();
   }
 
   function handleAlbum() {
@@ -48,59 +54,44 @@ export default function QuickCreateFab() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // 파일을 sessionStorage에 임시 저장 후 해당 페이지로 이동
     const fileUrls = Array.from(files).map((f) => URL.createObjectURL(f));
 
     if (isQC) {
-      // QC: 작업완료 사진 → QC 검증 페이지로 이동 (사진 첨부 상태)
       sessionStorage.setItem('fab_photos', JSON.stringify(fileUrls));
       sessionStorage.setItem('fab_photo_role', 'QC');
       router.push('/qc/verify?from=fab');
     } else {
-      // 운영팀: 시설요청 등록 페이지로 이동 (사진 첨부 상태)
       sessionStorage.setItem('fab_photos', JSON.stringify(fileUrls));
       sessionStorage.setItem('fab_photo_role', 'OPERATIONS');
       router.push('/requests/new?from=fab');
     }
 
-    // input 초기화 (같은 파일 재선택 가능)
     e.target.value = '';
   }
 
   const menuItems = isQC
     ? [
-        { icon: '📷', label: '작업완료 사진 촬영', action: handleCamera },
+        { icon: '📷', label: '작업완료 사진 촬영', action: handleCameraPhoto },
+        { icon: '🎬', label: '작업완료 영상 촬영', action: handleCameraVideo },
         { icon: '🖼️', label: '앨범에서 선택', action: handleAlbum },
       ]
     : [
         { icon: '📝', label: '시설요청 등록', action: () => { setOpen(false); router.push('/requests/new'); } },
-        { icon: '📷', label: '카메라', action: handleCamera },
+        { icon: '📷', label: '사진 촬영', action: handleCameraPhoto },
+        { icon: '🎬', label: '영상 촬영', action: handleCameraVideo },
         { icon: '🖼️', label: '앨범', action: handleAlbum },
       ];
 
   return (
     <div ref={menuRef} className="fixed bottom-6 right-6 z-40">
       {/* 숨겨진 파일 input */}
-      <input
-        ref={cameraRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleFileSelected}
-        className="hidden"
-      />
-      <input
-        ref={albumRef}
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={handleFileSelected}
-        className="hidden"
-      />
+      <input ref={cameraPhotoRef} type="file" accept="image/*" capture="environment" onChange={handleFileSelected} className="hidden" />
+      <input ref={cameraVideoRef} type="file" accept="video/*" capture="environment" onChange={handleFileSelected} className="hidden" />
+      <input ref={albumRef} type="file" accept="image/*,video/mp4,video/quicktime,video/webm" multiple onChange={handleFileSelected} className="hidden" />
 
       {/* 팝업 메뉴 */}
       {open && (
-        <div className="absolute bottom-16 right-0 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[180px] animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="absolute bottom-16 right-0 bg-white rounded-xl shadow-xl border border-gray-200 py-2 min-w-[200px] animate-in fade-in slide-in-from-bottom-2 duration-200">
           {menuItems.map((item, i) => (
             <button
               key={i}

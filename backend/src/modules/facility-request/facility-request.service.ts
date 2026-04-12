@@ -267,9 +267,10 @@ export async function createFacilityRequest(
     let media = null;
     if (file) {
       const serverBaseUrl = process.env.SERVER_BASE_URL ?? 'http://localhost:4000';
+      const isVideo = file.mimetype.startsWith('video/');
       media = await tx.media.create({
         data: {
-          type: 'IMAGE',
+          type: isVideo ? 'VIDEO' : 'IMAGE',
           phase: 'BEFORE',
           url: `${serverBaseUrl}/uploads/${file.filename}`,
           filename: file.originalname,
@@ -739,10 +740,11 @@ export async function completeWork(
   const updated = await prisma.$transaction(async (tx) => {
     const serverBaseUrl = process.env.SERVER_BASE_URL ?? 'http://localhost:4000';
 
-    // AFTER 사진 저장
+    // AFTER 사진/영상 저장
+    const isVideo = file.mimetype.startsWith('video/');
     await tx.media.create({
       data: {
-        type: 'IMAGE',
+        type: isVideo ? 'VIDEO' : 'IMAGE',
         phase: 'AFTER',
         url: `${serverBaseUrl}/uploads/${file.filename}`,
         filename: file.originalname,

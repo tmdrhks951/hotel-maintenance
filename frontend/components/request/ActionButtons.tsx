@@ -218,7 +218,7 @@ export default function ActionButtons({ request, onRefresh }: Props) {
     fd.append('workItem', workItem);
     fd.append('generatedText', generatedText);
     if (completionNote.trim()) fd.append('note', completionNote.trim());
-    if (afterPhoto) fd.append('photo', afterPhoto);
+    if (afterPhoto) fd.append('image', afterPhoto);
 
     completeWork.mutate(fd, {
       onSuccess: () => {
@@ -566,7 +566,7 @@ export default function ActionButtons({ request, onRefresh }: Props) {
           <PhotoUpload
             value={afterPhoto}
             onChange={setAfterPhoto}
-            label="수리 후 사진 (선택사항)"
+            label="수리 후 사진/영상 (선택사항)"
           />
 
           {/* Submit */}
