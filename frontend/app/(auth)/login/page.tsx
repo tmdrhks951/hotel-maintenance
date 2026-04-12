@@ -25,6 +25,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // 저장된 아이디/비밀번호 불러오기
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('saved_credentials');
+      if (saved) {
+        const { loginId: savedId, password: savedPw } = JSON.parse(saved);
+        setLoginId(savedId || '');
+        setPassword(savedPw || '');
+        setRememberMe(true);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   // 이미 로그인 상태면 역할별 홈으로 이동
   useEffect(() => {
@@ -50,6 +64,12 @@ export default function LoginPage() {
         loginId: loginId.trim(),
         password,
       });
+      // 아이디/비밀번호 저장
+      if (rememberMe) {
+        localStorage.setItem('saved_credentials', JSON.stringify({ loginId: loginId.trim(), password }));
+      } else {
+        localStorage.removeItem('saved_credentials');
+      }
       setAuth(data.data);
       router.replace(getRoleHome(data.data.user.role));
     } catch (err: unknown) {
@@ -98,6 +118,19 @@ export default function LoginPage() {
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => {
+                setRememberMe(e.target.checked);
+                if (!e.target.checked) localStorage.removeItem('saved_credentials');
+              }}
+              className="accent-blue-600 w-4 h-4"
+            />
+            <span className="text-sm text-gray-600">아이디/비밀번호 저장</span>
+          </label>
 
           <button
             type="submit"
