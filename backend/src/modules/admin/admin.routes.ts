@@ -7,6 +7,9 @@ import {
   getAgingRequestsHandler,
   getReopenedRequestsHandler,
   getRepeatIssuesHandler,
+  getPasswordResetRequestsHandler,
+  approvePasswordResetHandler,
+  rejectPasswordResetHandler,
 } from './admin.controller';
 
 const router = Router();
@@ -19,5 +22,8 @@ router.get('/kpi/summary', getKpiSummaryHandler);
 router.get('/exceptions/aging', getAgingRequestsHandler);
 router.get('/exceptions/reopened', getReopenedRequestsHandler);
 router.get('/exceptions/repeat-issues', getRepeatIssuesHandler);
+router.get('/password-reset-requests', getPasswordResetRequestsHandler);
+router.patch('/password-reset-requests/:id/approve', approvePasswordResetHandler);
+router.patch('/password-reset-requests/:id/reject', rejectPasswordResetHandler);
 
 export default router;

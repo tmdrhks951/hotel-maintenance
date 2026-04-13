@@ -1,6 +1,7 @@
-import { NotificationType } from '@prisma/client';
+import type { Department, NotificationType } from '@prisma/client';
 import { prisma } from '@/config/prisma';
 import { sseManager } from '@/common/sse/SseManager';
+import { DEPARTMENT_BRANCH_SCOPE } from '@/config/branch-scope';
 
 // ================================================================
 // fan-out 입력 타입
@@ -46,23 +47,81 @@ export async function fanOut(input: FanOutInput): Promise<void> {
 }
 
 // ================================================================
-// 수신자 조회 헬퍼
+// 수신자 조회 헬퍼 — 지점 접근 범위 기반
 // ================================================================
 
-export async function getQcUserIds(branchId: string): Promise<string[]> {
-  const users = await prisma.user.findMany({
-    where: { branchId, role: 'QC', isActive: true, deletedAt: null },
-    select: { id: true },
+/**
+ * 지점 접근 범위(branch-scope)에 따라 알림 수신 대상자를 결정합니다.
+ *
+ * - OPERATIONS / QC 팀장·부팀장: 부서 담당 지점 목록에 포함된 요청이면 수신
+ * - OPERATIONS / QC 팀원:        본인 담당 branchId와 요청 branchId가 일치하면 수신
+ * - ADMIN:                       EMERGENCY_SET 타입만 수신 (일반 작업 알림 없음)
+ * - VENDOR:                      알림 없음
+ */
+export async function getNotificationRecipients(
+  branchId: string,
+  type: NotificationType,
+): Promise<string[]> {
+  // 요청 지점의 code 조회
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { code: true },
   });
-  return users.map((u) => u.id);
+  if (!branch) return [];
+  const branchCode = branch.code;
+
+  const users = await prisma.user.findMany({
+    where: { isActive: true, deletedAt: null, status: 'APPROVED' },
+    select: { id: true, role: true, department: true, position: true, branchId: true, branchIds: true },
+  });
+
+  return users
+    .filter((user) => {
+      // ADMIN: 긴급 알림만
+      if (user.role === 'ADMIN') return type === 'EMERGENCY_SET';
+      // VENDOR: 알림 없음
+      if (user.role !== 'OPERATIONS' && user.role !== 'QC') return false;
+
+      const scope = DEPARTMENT_BRANCH_SCOPE[user.department as Department] ?? [];
+      const isLeader =
+        user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER';
+
+      // 팀장/부팀장: 부서 담당 지점에 포함되면 수신
+      if (isLeader) return scope.includes(branchCode);
+      // 팀원: 다중 지점 배열 우선, 없으면 단일 branchId로 fallback
+      if (user.branchIds.length > 0) return user.branchIds.includes(branchId);
+      return user.branchId === branchId;
+    })
+    .map((u) => u.id);
 }
 
-export async function getOperationsUserIds(branchId: string): Promise<string[]> {
-  const users = await prisma.user.findMany({
-    where: { branchId, role: 'OPERATIONS', isActive: true, deletedAt: null },
-    select: { id: true },
+/**
+ * 신규 요청 알림 전용 — QC 사용자만 (scope-aware)
+ * FACILITY_REQUEST_CREATED는 QC팀에게만 발송합니다.
+ */
+export async function getQcUserIds(branchId: string): Promise<string[]> {
+  const branch = await prisma.branch.findUnique({
+    where: { id: branchId },
+    select: { code: true },
   });
-  return users.map((u) => u.id);
+  if (!branch) return [];
+  const branchCode = branch.code;
+
+  const users = await prisma.user.findMany({
+    where: { isActive: true, deletedAt: null, status: 'APPROVED', role: 'QC' },
+    select: { id: true, department: true, position: true, branchId: true, branchIds: true },
+  });
+
+  return users
+    .filter((user) => {
+      const scope = DEPARTMENT_BRANCH_SCOPE[user.department as Department] ?? [];
+      const isLeader =
+        user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER';
+      if (isLeader) return scope.includes(branchCode);
+      if (user.branchIds.length > 0) return user.branchIds.includes(branchId);
+      return user.branchId === branchId;
+    })
+    .map((u) => u.id);
 }
 
 // ================================================================

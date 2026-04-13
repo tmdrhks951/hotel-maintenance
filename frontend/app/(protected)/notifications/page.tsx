@@ -52,7 +52,7 @@ function typeIcon(type: Notification['type']): string {
 // ================================================================
 
 function typeCardColor(type: Notification['type'], isRead: boolean, isToday_: boolean): string {
-  if (isRead) return 'border-gray-200 bg-white opacity-50';
+  if (isRead) return 'border-gray-200 bg-gray-50';
   if (isToday_) return 'border-yellow-400 bg-yellow-100';
   switch (type) {
     case 'FACILITY_REQUEST_CREATED':     return 'border-orange-400 bg-orange-100';
@@ -264,7 +264,7 @@ function NotificationCard({
   const cardClass = colorByType
     ? typeCardColor(item.type, item.isRead, isToday(item.request?.plannedWorkDate))
     : item.isRead
-      ? 'border-gray-200 bg-white opacity-50'
+      ? 'border-gray-200 bg-gray-50'
       : 'border-blue-400 bg-blue-100';
 
   function handleCardClick() {
@@ -278,15 +278,18 @@ function NotificationCard({
       className={`p-4 rounded-lg border transition-colors cursor-pointer hover:brightness-95 ${cardClass}`}
     >
       <div className="flex items-start gap-3">
-        <span className="text-xl flex-shrink-0 mt-0.5">{typeIcon(item.type)}</span>
+        <span className={`text-xl flex-shrink-0 mt-0.5 ${item.isRead ? 'opacity-40 grayscale' : ''}`}>{typeIcon(item.type)}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-gray-500 bg-white/80 rounded px-1.5 py-0.5">
+              <span className={`text-xs font-medium rounded px-1.5 py-0.5 ${item.isRead ? 'text-gray-400 bg-gray-100' : 'text-gray-500 bg-white/80'}`}>
                 {NOTIFICATION_TYPE_LABEL[item.type]}
               </span>
               {!item.isRead && (
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+              )}
+              {item.isRead && (
+                <span className="text-[10px] text-gray-400">읽음</span>
               )}
             </div>
             <span className="text-xs text-gray-400 flex-shrink-0">
@@ -298,11 +301,11 @@ function NotificationCard({
               })}
             </span>
           </div>
-          <p className="mt-1 text-sm font-medium text-gray-900">{item.title}</p>
+          <p className={`mt-1 text-sm font-medium ${item.isRead ? 'text-gray-400' : 'text-gray-900'}`}>{item.title}</p>
           {item.message && (
-            <p className="mt-0.5 text-xs text-gray-500">{item.message}</p>
+            <p className={`mt-0.5 text-xs ${item.isRead ? 'text-gray-300' : 'text-gray-500'}`}>{item.message}</p>
           )}
-          {item.requestId && (
+          {item.requestId && !item.isRead && (
             <p className="mt-2 text-xs text-blue-500">탭하여 상세 보기 →</p>
           )}
         </div>

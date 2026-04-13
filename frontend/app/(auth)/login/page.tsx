@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 import { useAppStore } from '@/stores/appStore';
 import type { ApiResponse, LoginResponse } from '@/types';
@@ -10,7 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const setAuth = useAppStore((s) => s.setAuth);
 
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export default function LoginPage() {
 
     try {
       const { data } = await apiClient.post<ApiResponse<LoginResponse>>('/auth/login', {
-        email,
+        loginId,
         password,
       });
       setAuth(data.data.user, data.data.accessToken, data.data.refreshToken);
@@ -41,16 +42,16 @@ export default function LoginPage() {
     <main className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg border border-gray-200 p-8 w-full max-w-sm">
         <h1 className="text-xl font-bold text-gray-900 mb-1">호텔 시설관리 시스템</h1>
-        <p className="text-sm text-gray-400 mb-6">STEP 4 — Branch / Location 관리</p>
+        <p className="text-sm text-gray-400 mb-6">시설 요청 · QC · 운영팀 통합 관리</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">아이디</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@hotel.com"
+              type="text"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="아이디 입력"
               required
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -83,9 +84,13 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-xs text-gray-400 mt-4 text-center">
-          테스트: admin@hotel.com / Admin@1234!
-        </p>
+        <div className="mt-5 flex justify-center gap-4 text-xs text-gray-400">
+          <Link href="/signup" className="hover:text-blue-500 hover:underline">회원가입</Link>
+          <span>·</span>
+          <Link href="/find-id" className="hover:text-blue-500 hover:underline">아이디 찾기</Link>
+          <span>·</span>
+          <Link href="/find-password" className="hover:text-blue-500 hover:underline">비밀번호 찾기</Link>
+        </div>
       </div>
     </main>
   );

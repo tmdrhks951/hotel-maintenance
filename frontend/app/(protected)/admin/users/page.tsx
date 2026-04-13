@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useEscKey } from '@/hooks/useEscKey';
 import { useAppStore } from '@/stores/appStore';
-import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser } from '@/hooks/useUsers';
+import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser, usePendingUsers, useApproveUser, useRejectUser } from '@/hooks/useUsers';
 import { useBranches } from '@/hooks/useBranches';
-import type { AdminUser, Role, Position, CreateUserBody, UpdateUserBody } from '@/types';
+import type { AdminUser, Role, Position, CreateUserBody, UpdateUserBody, PendingUser } from '@/types';
+import { DEPARTMENT_LABEL, POSITION_LABEL } from '@/types';
 
 // ================================================================
 // 레이블 맵
@@ -15,13 +16,7 @@ const ROLE_LABEL: Record<Role, string> = {
   ADMIN: '관리자',
   OPERATIONS: '운영팀',
   QC: 'QC',
-};
-
-const POSITION_LABEL: Record<Position, string> = {
-  TEAM_LEADER: '팀장',
-  DEPUTY_LEADER: '부팀장',
-  MEMBER: '팀원',
-  OTHER: '기타',
+  VENDOR: '외부업체',
 };
 
 const ROLES: Role[] = ['ADMIN', 'OPERATIONS', 'QC'];
@@ -350,6 +345,31 @@ export default function UsersPage() {
   const [showForm,    setShowForm]    = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
 
+  const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
+  const { data: pendingUsers, isLoading: pendingLoading } = usePendingUsers();
+  const approveMutation = useApproveUser();
+  const rejectMutation = useRejectUser();
+  const [approvalError, setApprovalError] = useState('');
+
+  async function handleApprove(userId: string) {
+    setApprovalError('');
+    try {
+      await approveMutation.mutateAsync(userId);
+    } catch (e: unknown) {
+      setApprovalError(e instanceof Error ? e.message : '승인 실패');
+    }
+  }
+
+  async function handleReject(userId: string) {
+    if (!confirm('이 사용자의 가입을 거부하시겠습니까?')) return;
+    setApprovalError('');
+    try {
+      await rejectMutation.mutateAsync(userId);
+    } catch (e: unknown) {
+      setApprovalError(e instanceof Error ? e.message : '거부 실패');
+    }
+  }
+
   const { data: users, isLoading, error } = useUsers({
     role:     filterRole     || undefined,
     branchId: filterBranchId || undefined,
@@ -400,6 +420,109 @@ export default function UsersPage() {
           + 계정 생성
         </button>
       </div>
+
+      {/* 탭 */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === 'all'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          전체 사용자
+        </button>
+        <button
+          onClick={() => setActiveTab('pending')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1 ${
+            activeTab === 'pending'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          승인 대기
+          {(pendingUsers?.length ?? 0) > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+              {pendingUsers?.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* 승인 대기 탭 */}
+      {activeTab === 'pending' && (
+        <div>
+          {approvalError && (
+            <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">{approvalError}</p>
+          )}
+          {pendingLoading ? (
+            <div className="text-center py-16 text-sm text-gray-400">불러오는 중...</div>
+          ) : !pendingUsers?.length ? (
+            <div className="text-center py-16 text-sm text-gray-400">승인 대기 중인 사용자가 없습니다</div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <table className="w-full min-w-[700px]">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">이름</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">아이디</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">역할</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">부서</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">직위</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">지점</th>
+                    <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500">신청일</th>
+                    <th className="py-2.5 px-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((u: PendingUser) => (
+                    <tr key={u.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{u.name}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600 font-mono">{u.loginId ?? u.email}</td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
+                          u.role === 'QC' ? 'bg-blue-100 text-blue-700' :
+                          u.role === 'VENDOR' ? 'bg-orange-100 text-orange-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {ROLE_LABEL[u.role]}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{DEPARTMENT_LABEL[u.department]}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{POSITION_LABEL[u.position]}</td>
+                      <td className="py-3 px-4 text-sm text-gray-600">{u.branch?.name ?? '—'}</td>
+                      <td className="py-3 px-4 text-xs text-gray-400">{new Date(u.createdAt).toLocaleDateString('ko-KR')}</td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleApprove(u.id)}
+                            disabled={approveMutation.isPending}
+                            className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                          >
+                            승인
+                          </button>
+                          <button
+                            onClick={() => handleReject(u.id)}
+                            disabled={rejectMutation.isPending}
+                            className="text-xs border border-red-300 text-red-600 px-3 py-1 rounded hover:bg-red-50 disabled:opacity-50"
+                          >
+                            거부
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 전체 사용자 탭 */}
+      {activeTab === 'all' && (
+      <div>
 
       {/* 필터 바 */}
       <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 mb-4">
@@ -492,6 +615,9 @@ export default function UsersPage() {
             </table>
           )}
         </div>
+      )}
+
+      </div>
       )}
 
       {/* 생성/수정 패널 */}

@@ -1,5 +1,7 @@
 import { FacilityRequestStatus } from '@prisma/client';
 import { prisma } from '@/config/prisma';
+import { hashPassword } from '@/common/utils/password.util';
+import { AppError } from '@/common/errors/AppError';
 
 // ================================================================
 // 필터 타입
@@ -234,4 +236,105 @@ export async function getRepeatIssues(filters: AdminFilters) {
     category: g.category,
     count: g._count.id,
   }));
+}
+
+// ================================================================
+// 임시 비밀번호 생성
+// ================================================================
+
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#';
+  let result = '';
+  for (let i = 0; i < 10; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// ================================================================
+// getPasswordResetRequests — 비밀번호 재설정 요청 목록 (ADMIN)
+// ================================================================
+
+export async function getPasswordResetRequests() {
+  const requests = await prisma.passwordResetRequest.findMany({
+    where: { status: 'PENDING' },
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          loginId: true,
+          email: true,
+          name: true,
+          role: true,
+          department: true,
+          position: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  return requests;
+}
+
+// ================================================================
+// approvePasswordReset — 비밀번호 재설정 승인 (ADMIN)
+// ================================================================
+
+export async function approvePasswordReset(requestId: string, adminId: string) {
+  const request = await prisma.passwordResetRequest.findFirst({
+    where: { id: requestId, status: 'PENDING' },
+  });
+
+  if (!request) {
+    throw new AppError('해당 요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  const tempPassword = generateTempPassword();
+  const passwordHash = await hashPassword(tempPassword);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: request.userId },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'APPROVED',
+        reviewedById: adminId,
+        reviewedAt: new Date(),
+      },
+    }),
+  ]);
+
+  return { tempPassword };
+}
+
+// ================================================================
+// rejectPasswordReset — 비밀번호 재설정 거부 (ADMIN)
+// ================================================================
+
+export async function rejectPasswordReset(requestId: string, adminId: string) {
+  const request = await prisma.passwordResetRequest.findFirst({
+    where: { id: requestId, status: 'PENDING' },
+  });
+
+  if (!request) {
+    throw new AppError('해당 요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  const updated = await prisma.passwordResetRequest.update({
+    where: { id: requestId },
+    data: {
+      status: 'REJECTED',
+      reviewedById: adminId,
+      reviewedAt: new Date(),
+    },
+    select: { id: true, status: true },
+  });
+
+  return updated;
 }

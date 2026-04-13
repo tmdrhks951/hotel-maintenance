@@ -6,8 +6,11 @@ import {
   useOperationsDashboard,
   useFacilityRequestDetail,
   useOperationsConfirm,
+  useUpdateFacilityRequest,
+  useDeleteFacilityRequest,
+  useReopenFacilityRequest,
 } from '@/hooks/useQcQueue';
-import type { OperationsCard } from '@/types';
+import type { OperationsCard, RequestCategory } from '@/types';
 import {
   REQUEST_CATEGORY_LABEL,
   REQUEST_STATUS_LABEL,
@@ -17,6 +20,7 @@ import { StatusTimeline } from '@/components/StatusTimeline';
 import { CommentSection } from '@/components/CommentSection';
 import { WorkHistoryModal } from '@/components/WorkHistoryModal';
 import { useEscKey } from '@/hooks/useEscKey';
+import { BranchGroupedList } from '@/components/BranchGroupedList';
 
 // ================================================================
 // 섹션 정의
@@ -152,14 +156,35 @@ function OpsDetailPanel({
   requestId: string;
   onClose: () => void;
 }) {
+  const { user } = useAppStore();
   const { data: req, isLoading } = useFacilityRequestDetail(requestId);
   const confirmMutation = useOperationsConfirm(requestId);
+  const reopenMutation = useReopenFacilityRequest(requestId);
+  const updateMut = useUpdateFacilityRequest();
+  const deleteMut = useDeleteFacilityRequest();
 
   useEscKey(onClose);
 
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 재오픈 모달 상태
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
+
+  // 수정 상태
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editCategory, setEditCategory] = useState<RequestCategory>('OTHER');
+
+  const canEditDelete = user && (
+    user.role === 'ADMIN' ||
+    user.role === 'OPERATIONS' ||
+    (user.role === 'QC' &&
+     (user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER'))
+  );
 
   function showSuccess(msg: string) {
     setSuccess(msg);
@@ -177,6 +202,22 @@ function OpsDetailPanel({
     }
   }
 
+  async function handleReopenSubmit() {
+    if (!reopenReason.trim()) {
+      setError('재오픈 사유를 입력해주세요');
+      return;
+    }
+    setError('');
+    try {
+      await reopenMutation.mutateAsync({ reason: reopenReason.trim() });
+      setReopenModalOpen(false);
+      setReopenReason('');
+      showSuccess('재오픈됐습니다');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : '처리 실패');
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-end bg-black/30"
@@ -189,13 +230,105 @@ function OpsDetailPanel({
         {/* 헤더 */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-5 py-3 flex items-center justify-between z-10">
           <h3 className="text-sm font-semibold text-gray-900">요청 상세</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {canEditDelete && req && (
+              <>
+                <button
+                  onClick={() => {
+                    setEditTitle(req.title);
+                    setEditDesc(req.description);
+                    setEditCategory(req.category);
+                    setIsEditing(true);
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800"
+                >
+                  수정
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!confirm('이 요청을 삭제하시겠습니까?')) return;
+                    try {
+                      await deleteMut.mutateAsync(requestId);
+                      onClose();
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : '삭제 실패');
+                    }
+                  }}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >
+                  삭제
+                </button>
+              </>
+            )}
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+            >
+              ✕
+            </button>
+          </div>
         </div>
+
+        {/* 수정 폼 */}
+        {isEditing && req && (
+          <div className="p-5 space-y-3 border-b border-gray-100 bg-blue-50/30">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">제목</label>
+              <input
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">설명</label>
+              <textarea
+                rows={2}
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                value={editDesc}
+                onChange={(e) => setEditDesc(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">카테고리</label>
+              <select
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm"
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value as RequestCategory)}
+              >
+                {Object.entries(REQUEST_CATEGORY_LABEL).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await updateMut.mutateAsync({
+                      id: requestId,
+                      body: { title: editTitle, description: editDesc, category: editCategory },
+                    });
+                    setIsEditing(false);
+                    showSuccess('수정되었습니다');
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : '수정 실패');
+                  }
+                }}
+                disabled={updateMut.isPending}
+                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updateMut.isPending ? '저장 중...' : '저장'}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="p-8 text-center text-sm text-gray-400">불러오는 중...</div>
@@ -218,9 +351,16 @@ function OpsDetailPanel({
             <section>
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h4 className="text-base font-semibold text-gray-900">{req.title}</h4>
-                <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 whitespace-nowrap">
-                  {REQUEST_STATUS_LABEL[req.status]}
-                </span>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {req.reopenCount > 0 && (
+                    <span className="text-xs px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
+                      재오픈 {req.reopenCount}회
+                    </span>
+                  )}
+                  <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 whitespace-nowrap">
+                    {REQUEST_STATUS_LABEL[req.status]}
+                  </span>
+                </div>
               </div>
               <div className="text-xs text-gray-500 space-y-0.5">
                 <div>
@@ -307,8 +447,94 @@ function OpsDetailPanel({
               </>
             )}
 
+            {/* 재오픈 (CLOSED 상태) */}
+            {req.status === 'CLOSED' && (
+              <>
+                <hr className="border-gray-100" />
+                <section>
+                  <button
+                    onClick={() => { setReopenReason(''); setReopenModalOpen(true); }}
+                    disabled={reopenMutation.isPending}
+                    className="w-full py-2.5 text-sm rounded border border-orange-400 text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+                  >
+                    재오픈 요청
+                  </button>
+                </section>
+              </>
+            )}
+
+            {/* 재오픈 이력 */}
+            {req.reopenCount > 0 && (() => {
+              const reopenLogs = req.statusLogs.filter(l => l.toStatus === 'REOPENED');
+              if (reopenLogs.length === 0) return null;
+              return (
+                <>
+                  <hr className="border-gray-100" />
+                  <section>
+                    <h4 className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">
+                      재오픈 이력 ({reopenLogs.length}회)
+                    </h4>
+                    <div className="space-y-2">
+                      {reopenLogs.map((log, i) => (
+                        <div key={log.id} className="bg-orange-50 border border-orange-100 rounded p-2 text-xs">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-medium text-orange-700">{i + 1}차 재오픈</span>
+                            <span className="text-gray-400">
+                              {new Date(log.createdAt).toLocaleString('ko-KR')}
+                            </span>
+                          </div>
+                          {log.reason && <div className="text-gray-700">{log.reason}</div>}
+                          <div className="text-gray-500 mt-0.5">{log.changedBy.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              );
+            })()}
+
             <StatusTimeline logs={req.statusLogs} />
             <OpsCommentSection requestId={requestId} />
+          </div>
+        )}
+
+        {/* 재오픈 사유 입력 모달 */}
+        {reopenModalOpen && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
+            onClick={() => setReopenModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">재오픈 요청</h3>
+              <p className="text-xs text-gray-500 mb-3">재오픈 이유를 입력해주세요 (필수)</p>
+              <textarea
+                rows={3}
+                placeholder="재오픈 사유를 입력해주세요"
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-orange-500 mb-3"
+                autoFocus
+              />
+              {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setReopenModalOpen(false)}
+                  className="flex-1 py-2 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleReopenSubmit}
+                  disabled={reopenMutation.isPending}
+                  className="flex-1 py-2 text-sm rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50"
+                >
+                  {reopenMutation.isPending ? '처리 중...' : '재오픈'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -402,22 +628,24 @@ export default function OperationsPage() {
                     {items.length}
                   </span>
                 </div>
-                {/* 카드 목록 */}
-                {items.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-6">없음</p>
-                ) : (
-                  <div className="space-y-2">
-                    {items.map((req) => (
-                      <WorkCard
-                        key={req.id}
-                        req={req}
-                        selected={selectedId === req.id}
-                        onClick={() => setSelectedId(req.id)}
-                        showTodayStyle={key === 'today'}
-                      />
-                    ))}
-                  </div>
-                )}
+                {/* 지점별 그룹핑 목록 */}
+                <BranchGroupedList
+                  items={items}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  renderExtra={(item) => {
+                    const isConfirmNeeded = item.status === 'QC_VERIFIED';
+                    if (!isConfirmNeeded) return null;
+                    return (
+                      <div className="mt-1">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0" />
+                          확인필요
+                        </span>
+                      </div>
+                    );
+                  }}
+                />
               </div>
             );
           })}

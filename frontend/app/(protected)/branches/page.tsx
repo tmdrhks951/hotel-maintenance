@@ -12,7 +12,7 @@ import type { Branch } from '@/types';
 // ================================================================
 
 function CreateBranchForm({ onClose }: { onClose: () => void }) {
-  const { mutateAsync, isPending, error } = useCreateBranch();
+  const { mutateAsync, isPending } = useCreateBranch();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [address, setAddress] = useState('');
@@ -98,10 +98,85 @@ function CreateBranchForm({ onClose }: { onClose: () => void }) {
 }
 
 // ================================================================
-// Branch 카드
+// 자식 지점 카드 (들여쓰기)
 // ================================================================
 
-function BranchCard({ branch, onClick }: { branch: Branch; onClick: () => void }) {
+function ChildBranchCard({ branch, onClick }: { branch: Branch; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left border border-gray-100 rounded-lg px-4 py-3 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 transition-all"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-300">└</span>
+          <span className="font-medium text-gray-800">{branch.name}</span>
+          {!branch.isActive && (
+            <span className="text-xs text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+              비활성
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {branch._count && (
+            <span className="text-xs text-gray-400">
+              위치 {branch._count.locations}개
+            </span>
+          )}
+          <span className="text-xs text-blue-500">상세 →</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ================================================================
+// 부모 지점 (그룹 아코디언)
+// ================================================================
+
+function ParentBranchGroup({ branch, router }: { branch: Branch; router: ReturnType<typeof useRouter> }) {
+  const [expanded, setExpanded] = useState(false);
+  const children = branch.children ?? [];
+
+  return (
+    <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full text-left px-4 py-4 hover:bg-gray-50 transition-all"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className={`text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`}>
+              ▶
+            </span>
+            <span className="font-semibold text-gray-900">{branch.name}</span>
+            <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+              {children.length}개 지점
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {expanded && children.length > 0 && (
+        <div className="px-4 pb-3 space-y-2 ml-4">
+          {children.map((child) => (
+            <ChildBranchCard
+              key={child.id}
+              branch={child}
+              onClick={() => router.push(`/branches/${child.id}`)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================================================================
+// 독립 지점 카드 (자식 없음)
+// ================================================================
+
+function StandaloneBranchCard({ branch, onClick }: { branch: Branch; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -110,9 +185,6 @@ function BranchCard({ branch, onClick }: { branch: Branch; onClick: () => void }
       <div className="flex items-start justify-between">
         <div>
           <span className="font-semibold text-gray-900">{branch.name}</span>
-          <span className="ml-2 text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-            {branch.code}
-          </span>
           {!branch.isActive && (
             <span className="ml-2 text-xs text-red-500 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
               비활성
@@ -199,13 +271,27 @@ export default function BranchesPage() {
         <p className="text-sm text-gray-400 py-8 text-center">등록된 지점이 없습니다.</p>
       )}
       <div className="grid gap-3">
-        {branches?.map((branch) => (
-          <BranchCard
-            key={branch.id}
-            branch={branch}
-            onClick={() => router.push(`/branches/${branch.id}`)}
-          />
-        ))}
+        {branches?.map((branch) => {
+          const hasChildren = branch.children && branch.children.length > 0;
+
+          if (hasChildren) {
+            return (
+              <ParentBranchGroup
+                key={branch.id}
+                branch={branch}
+                router={router}
+              />
+            );
+          }
+
+          return (
+            <StandaloneBranchCard
+              key={branch.id}
+              branch={branch}
+              onClick={() => router.push(`/branches/${branch.id}`)}
+            />
+          );
+        })}
       </div>
     </div>
   );

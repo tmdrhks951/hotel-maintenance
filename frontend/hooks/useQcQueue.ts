@@ -12,6 +12,7 @@ import type {
   QcReviewBody,
   QcVerifyBody,
   OperationsConfirmBody,
+  ReopenBody,
   AssignableUser,
 } from '@/types';
 
@@ -308,6 +309,70 @@ export function useQcHistory(branchId?: string | null) {
         `/facility-requests/qc-history${params}`,
       );
       return data.data;
+    },
+  });
+}
+
+// ================================================================
+// STEP 11: 재오픈
+// ================================================================
+
+export function useReopenFacilityRequest(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ReopenBody) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/reopen`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.invalidateQueries({ queryKey: ['operations-pending'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      qc.setQueryData(['facility-request', requestId], updated);
+    },
+  });
+}
+
+// ================================================================
+// 시설 요청 수정
+// ================================================================
+
+export function useUpdateFacilityRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: { title?: string; description?: string; category?: string; locationId?: string | null } }) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${id}`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['facility-request', variables.id] });
+    },
+  });
+}
+
+// ================================================================
+// 시설 요청 삭제
+// ================================================================
+
+export function useDeleteFacilityRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await apiClient.delete(`/facility-requests/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['operations-pending'] });
     },
   });
 }

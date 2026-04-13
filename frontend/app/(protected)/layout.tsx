@@ -47,26 +47,46 @@ interface NavItem {
   label: string;
 }
 
-function getNavItems(role: string): NavItem[] {
+function getNavItems(role: string, position: string): NavItem[] {
+  const isLeader = position === 'TEAM_LEADER' || position === 'DEPUTY_LEADER';
+
   switch (role) {
     case 'OPERATIONS':
       return [
-        { href: '/camera',          label: '요청 등록' },
-        { href: '/operations',      label: '작업 확인' },
-        { href: '/admin/reports',   label: '리포트' },
+        { href: '/camera',            label: '요청 등록' },
+        { href: '/operations',        label: '작업 확인' },
+        ...(isLeader ? [{ href: '/admin/reports', label: '리포트' }] : []),
+        { href: '/admin/schedules',   label: '예약 일정' },
+        { href: '/notices',           label: '공지' },
+        { href: '/manuals',           label: '매뉴얼' },
       ];
     case 'QC':
       return [
-        { href: '/qc', label: 'QC 큐' },
+        { href: '/qc',               label: 'QC 큐' },
+        ...(isLeader ? [{ href: '/admin/reports', label: '리포트' }] : []),
+        { href: '/admin/schedules',   label: '예약 일정' },
+        { href: '/notices',           label: '공지' },
+        { href: '/manuals',           label: '매뉴얼' },
       ];
     case 'ADMIN':
       return [
-        { href: '/branches',        label: '지점 관리' },
-        { href: '/qc',              label: 'QC 큐' },
-        { href: '/operations',      label: '작업 확인' },
-        { href: '/admin/reports',   label: '리포트' },
-        { href: '/admin/users',     label: '사용자' },
-        { href: '/admin',           label: '관리' },
+        { href: '/branches',           label: '지점 관리' },
+        { href: '/qc',                 label: 'QC 큐' },
+        { href: '/operations',         label: '작업 확인' },
+        { href: '/admin/reports',      label: '리포트' },
+        { href: '/admin/schedules',    label: '예약 일정' },
+        { href: '/admin/users',        label: '사용자' },
+        { href: '/admin/approvals',    label: '재설정 요청' },
+        { href: '/admin',              label: '관리' },
+        { href: '/notices',            label: '공지' },
+        { href: '/manuals',            label: '매뉴얼' },
+      ];
+    case 'VENDOR':
+      return [
+        { href: '/camera',            label: '요청 등록' },
+        { href: '/operations',        label: '작업 확인' },
+        { href: '/notices',           label: '공지' },
+        { href: '/manuals',           label: '매뉴얼' },
       ];
     default:
       return [];
@@ -113,7 +133,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  const navItems = getNavItems(user.role);
+  const navItems = getNavItems(user.role, user.position);
 
   return (
     <div className="min-h-screen bg-gray-50">

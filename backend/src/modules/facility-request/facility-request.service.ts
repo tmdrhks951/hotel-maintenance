@@ -1,15 +1,17 @@
 import { FacilityRequestStatus } from '@prisma/client';
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
-import { fanOut, getQcUserIds, getOperationsUserIds } from '../notification/notification.service';
+import { fanOut, getQcUserIds, getNotificationRecipients } from '../notification/notification.service';
 import type {
   CreateFacilityRequestDto,
+  UpdateFacilityRequestDto,
   QcReviewDto,
   UpdateScheduleDto,
   AssignWorkerDto,
   CompleteWorkDto,
   QcVerifyDto,
   OperationsConfirmDto,
+  ReopenFacilityRequestDto,
 } from './facility-request.dto';
 
 // ================================================================
@@ -41,7 +43,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   DONE_BY_QC: ['QC_VERIFIED', 'REOPENED'],
   QC_VERIFIED: ['OPERATIONS_CONFIRMED', 'REOPENED'],
   OPERATIONS_CONFIRMED: ['CLOSED', 'REOPENED'],
-  CLOSED: [],
+  CLOSED: ['REOPENED'],
   REOPENED: ['REVIEW_REQUIRED', 'RECEIVED'],
   CANCELLED: [],
   COMPLETED: ['CLOSED'],
@@ -128,6 +130,7 @@ const REQUEST_DETAIL_SELECT = {
   qcVerifiedAt: true,
   operationsConfirmedByUserId: true,
   operationsConfirmedAt: true,
+  reopenCount: true,
   createdAt: true,
   updatedAt: true,
   branch: { select: { id: true, name: true, code: true } },
@@ -343,9 +346,9 @@ export async function getQcQueue(
   } as const;
 
   const [newRequests, reviewRequired, inProgress] = await Promise.all([
-    // 신규 요청: PENDING(레거시) + REQUESTED
+    // 신규 요청: PENDING(레거시) + REQUESTED + REOPENED
     prisma.facilityRequest.findMany({
-      where: { ...baseWhere, status: { in: ['PENDING', 'REQUESTED'] } },
+      where: { ...baseWhere, status: { in: ['PENDING', 'REQUESTED', 'REOPENED'] } },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
     }),
@@ -488,11 +491,11 @@ export async function qcReview(
     return req;
   });
 
-  // STEP 10: 긴급 전환 알림 (false → true 변경 시만)
+  // STEP 10: 긴급 전환 알림 (false → true 변경 시만) — ADMIN 포함 전 지점 scope
   if (dto.isEmergency === true && !request.isEmergency) {
-    getQcUserIds(request.branchId)
-      .then((qcIds) => {
-        const recipients = [...new Set([...qcIds, ...(request.assignedToId ? [request.assignedToId] : [])])];
+    getNotificationRecipients(request.branchId, 'EMERGENCY_SET')
+      .then((scopeIds) => {
+        const recipients = [...new Set([...scopeIds, ...(request.assignedToId ? [request.assignedToId] : [])])];
         return fanOut({
           type: 'EMERGENCY_SET',
           recipientIds: recipients,
@@ -504,13 +507,13 @@ export async function qcReview(
       .catch(() => {});
   }
 
-  // RECEIVE / START_WORK — 운영팀 대시보드 실시간 갱신
+  // RECEIVE / START_WORK — 운영팀 + QC 대시보드 실시간 갱신
   if (dto.action === 'RECEIVE' || dto.action === 'START_WORK') {
-    getOperationsUserIds(request.branchId)
-      .then((opsIds) =>
+    getNotificationRecipients(request.branchId, 'STATUS_CHANGED')
+      .then((ids) =>
         fanOut({
           type: 'STATUS_CHANGED',
-          recipientIds: opsIds,
+          recipientIds: ids,
           requestId,
           title: dto.action === 'RECEIVE'
             ? `수령 완료: ${updated.title}`
@@ -611,12 +614,12 @@ export async function updateSchedule(
     return req;
   });
 
-  // 운영팀에게 일정 등록/변경 알림 — Operations 대시보드 실시간 갱신
-  getOperationsUserIds(request.branchId)
-    .then((opsIds) =>
+  // 일정 등록/변경 알림 — 운영팀 + QC 전체 scope
+  getNotificationRecipients(request.branchId, 'STATUS_CHANGED')
+    .then((ids) =>
       fanOut({
         type: 'STATUS_CHANGED',
-        recipientIds: opsIds,
+        recipientIds: ids,
         requestId,
         title: isFirstSchedule
           ? `일정 등록: ${updated.title}`
@@ -675,13 +678,18 @@ export async function assignWorker(
     select: REQUEST_DETAIL_SELECT,
   });
 
-  // STEP 10: 담당자에게 배정 알림
-  fanOut({
-    type: 'WORKER_ASSIGNED',
-    recipientIds: [dto.assignedToId],
-    requestId,
-    title: `담당 배정: ${updated.title}`,
-  }).catch(() => {});
+  // STEP 10: 담당자 배정 알림 — 담당자 본인 + scope 내 팀장/팀원
+  getNotificationRecipients(updated.branchId, 'WORKER_ASSIGNED')
+    .then((scopeIds) => {
+      const recipients = [...new Set([...scopeIds, dto.assignedToId])];
+      return fanOut({
+        type: 'WORKER_ASSIGNED',
+        recipientIds: recipients,
+        requestId,
+        title: `담당 배정: ${updated.title}`,
+      });
+    })
+    .catch(() => {});
 
   return updated;
 }
@@ -768,12 +776,12 @@ export async function completeWork(
     return req;
   });
 
-  // 운영팀에게 작업 완료 알림 — 금일 진행 목록 실시간 갱신
-  getOperationsUserIds(request.branchId)
-    .then((opsIds) =>
+  // 작업 완료 알림 — 운영팀 + QC 전체 scope
+  getNotificationRecipients(request.branchId, 'STATUS_CHANGED')
+    .then((ids) =>
       fanOut({
         type: 'STATUS_CHANGED',
-        recipientIds: opsIds,
+        recipientIds: ids,
         requestId,
         title: `QC 완료: ${updated.title}`,
       }),
@@ -868,6 +876,11 @@ export async function qcVerify(
     );
   }
 
+  // STEP 11: REOPEN 시 사유 필수
+  if (dto.action === 'REOPEN' && !dto.note?.trim()) {
+    throw new AppError('재오픈 사유를 입력해주세요', 400, true, 'REOPEN_REASON_REQUIRED');
+  }
+
   const newStatus = dto.action === 'VERIFY' ? 'QC_VERIFIED' : 'REOPENED';
   assertValidTransition(request.status, newStatus);
 
@@ -876,6 +889,9 @@ export async function qcVerify(
     if (dto.action === 'VERIFY') {
       updateData.qcVerifiedById = userId;
       updateData.qcVerifiedAt = new Date();
+    } else {
+      // REOPEN: reopenCount 증가
+      updateData.reopenCount = { increment: 1 };
     }
 
     const req = await tx.facilityRequest.update({
@@ -899,22 +915,22 @@ export async function qcVerify(
 
   // STEP 10: 알림 — 상태에 따라 fan-out
   if (dto.action === 'VERIFY') {
-    // 운영팀에게 확인 요청 알림
-    getOperationsUserIds(request.branchId)
-      .then((opsIds) =>
+    // 운영팀 + QC 확인 요청 알림
+    getNotificationRecipients(request.branchId, 'OPERATIONS_CONFIRM_REQUESTED')
+      .then((ids) =>
         fanOut({
           type: 'OPERATIONS_CONFIRM_REQUESTED',
-          recipientIds: opsIds,
+          recipientIds: ids,
           requestId,
           title: `운영팀 확인 요청: ${updated.title}`,
         }),
       )
       .catch(() => {});
   } else if (dto.action === 'REOPEN') {
-    // QC + 요청 생성자에게 재오픈 알림
-    getQcUserIds(request.branchId)
-      .then((qcIds) => {
-        const recipients = [...new Set([...qcIds, request.createdById])];
+    // 운영팀 + QC + 요청 생성자에게 재오픈 알림
+    getNotificationRecipients(request.branchId, 'REQUEST_REOPENED')
+      .then((scopeIds) => {
+        const recipients = [...new Set([...scopeIds, request.createdById])];
         return fanOut({
           type: 'REQUEST_REOPENED',
           recipientIds: recipients,
@@ -1322,4 +1338,172 @@ export async function getWorkHistory(
   });
 
   return items;
+}
+
+// ================================================================
+// 시설 요청 수정 — QC/OPERATIONS 팀장급 + ADMIN
+// ================================================================
+
+export async function updateFacilityRequest(
+  requestId: string,
+  userId: string,
+  role: string,
+  position: string,
+  userBranchId: string | null,
+  dto: UpdateFacilityRequestDto,
+) {
+  assertEditPermission(role, position);
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, status: true, branchId: true, title: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  const updateData: Record<string, unknown> = {};
+  if (dto.title !== undefined) updateData.title = dto.title;
+  if (dto.description !== undefined) updateData.description = dto.description;
+  if (dto.category !== undefined) updateData.category = dto.category;
+  if (dto.locationId !== undefined) updateData.locationId = dto.locationId || null;
+
+  const updated = await prisma.facilityRequest.update({
+    where: { id: requestId },
+    data: updateData,
+    select: REQUEST_DETAIL_SELECT,
+  });
+
+  return updated;
+}
+
+// ================================================================
+// 시설 요청 삭제 (soft delete) — QC/OPERATIONS 팀장급 + ADMIN
+// ================================================================
+
+export async function deleteFacilityRequest(
+  requestId: string,
+  role: string,
+  position: string,
+  userBranchId: string | null,
+) {
+  assertEditPermission(role, position);
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, branchId: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  await prisma.facilityRequest.update({
+    where: { id: requestId },
+    data: { deletedAt: new Date() },
+  });
+
+  return { message: '삭제되었습니다' };
+}
+
+// ================================================================
+// 수정/삭제 권한 — ADMIN 또는 QC/OPERATIONS 팀장급
+// ================================================================
+
+function assertEditPermission(role: string, position: string): void {
+  if (role === 'ADMIN') return;
+  if (role === 'OPERATIONS') return;
+  if (role === 'QC' &&
+      (position === 'TEAM_LEADER' || position === 'DEPUTY_LEADER')) return;
+  throw new AppError('수정/삭제 권한이 없습니다', 403, true, 'FORBIDDEN');
+}
+
+// ================================================================
+// STEP 11: reopenFacilityRequest
+//  - QC/ADMIN     : QC_VERIFIED → REOPENED
+//  - OPERATIONS/ADMIN : CLOSED → REOPENED
+// ================================================================
+
+export async function reopenFacilityRequest(
+  requestId: string,
+  userId: string,
+  role: string,
+  userBranchId: string | null,
+  dto: ReopenFacilityRequestDto,
+) {
+  if (!['QC', 'OPERATIONS', 'ADMIN'].includes(role)) {
+    throw new AppError('접근 권한이 없습니다', 403, true, 'FORBIDDEN');
+  }
+
+  if (!dto.reason?.trim()) {
+    throw new AppError('재오픈 사유를 입력해주세요', 400, true, 'REOPEN_REASON_REQUIRED');
+  }
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, status: true, branchId: true, createdById: true, title: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchId, request.branchId);
+
+  // 역할별 허용 상태 검증
+  if (role === 'QC' && request.status !== 'QC_VERIFIED') {
+    throw new AppError('QC 검토 완료 상태에서만 재오픈이 가능합니다', 400, true, 'INVALID_STATUS');
+  }
+  if (role === 'OPERATIONS' && request.status !== 'CLOSED') {
+    throw new AppError('종료 상태에서만 재오픈이 가능합니다', 400, true, 'INVALID_STATUS');
+  }
+  if (role === 'ADMIN' && !['QC_VERIFIED', 'CLOSED'].includes(request.status)) {
+    throw new AppError('QC 검토 완료 또는 종료 상태에서만 재오픈이 가능합니다', 400, true, 'INVALID_STATUS');
+  }
+
+  assertValidTransition(request.status, 'REOPENED');
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const req = await tx.facilityRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'REOPENED',
+        reopenCount: { increment: 1 },
+      },
+      select: REQUEST_DETAIL_SELECT,
+    });
+
+    await tx.statusLog.create({
+      data: {
+        requestId,
+        fromStatus: request.status as FacilityRequestStatus,
+        toStatus: 'REOPENED',
+        reason: dto.reason.trim(),
+        changedById: userId,
+      },
+    });
+
+    return req;
+  });
+
+  // 운영팀 + QC + 요청 생성자에게 재오픈 알림
+  getNotificationRecipients(request.branchId, 'REQUEST_REOPENED')
+    .then((scopeIds) => {
+      const recipients = [...new Set([...scopeIds, request.createdById])];
+      return fanOut({
+        type: 'REQUEST_REOPENED',
+        recipientIds: recipients,
+        requestId,
+        title: `재오픈: ${request.title}`,
+        message: dto.reason,
+      });
+    })
+    .catch(() => {});
+
+  return updated;
 }

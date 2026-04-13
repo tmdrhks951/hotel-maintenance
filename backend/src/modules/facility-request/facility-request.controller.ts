@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { RequestCategory } from '@prisma/client';
 import { AppError } from '@/common/errors/AppError';
 import * as facilityRequestService from './facility-request.service';
-import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto, QcVerifyDto, OperationsConfirmDto } from './facility-request.dto';
+import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto, QcVerifyDto, OperationsConfirmDto, UpdateFacilityRequestDto, ReopenFacilityRequestDto } from './facility-request.dto';
 
 // ================================================================
 // GET /api/v1/facility-requests/duplicate-check
@@ -487,6 +487,173 @@ export async function getQcHistoryHandler(
       user.role,
       user.branchId,
       filterBranchId,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// GET /api/v1/facility-requests/operations-dashboard
+// ================================================================
+
+export async function getOperationsDashboardHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const filterBranchId =
+      typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
+
+    const result = await facilityRequestService.getOperationsDashboard(
+      user.role,
+      user.branchId,
+      filterBranchId,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// GET /api/v1/facility-requests/work-history
+// ================================================================
+
+export async function getWorkHistoryHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const result = await facilityRequestService.getWorkHistory(
+      user.role,
+      user.branchId,
+      {
+        date: typeof req.query.date === 'string' ? req.query.date : undefined,
+        startDate: typeof req.query.startDate === 'string' ? req.query.startDate : undefined,
+        endDate: typeof req.query.endDate === 'string' ? req.query.endDate : undefined,
+        keyword: typeof req.query.keyword === 'string' ? req.query.keyword : undefined,
+        filterBranchId: typeof req.query.branchId === 'string' ? req.query.branchId : undefined,
+      },
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id  (수정)
+// ================================================================
+
+export async function updateFacilityRequestHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as UpdateFacilityRequestDto;
+
+    const result = await facilityRequestService.updateFacilityRequest(
+      req.params.id,
+      user.id,
+      user.role,
+      user.position,
+      user.branchId,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id/reopen  (STEP 11)
+// ================================================================
+
+export async function reopenFacilityRequestHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as ReopenFacilityRequestDto;
+
+    if (!dto.reason?.trim()) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: '재오픈 사유를 입력해주세요' },
+      });
+      return;
+    }
+
+    const result = await facilityRequestService.reopenFacilityRequest(
+      req.params.id,
+      user.id,
+      user.role,
+      user.branchId,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// DELETE /api/v1/facility-requests/:id  (삭제)
+// ================================================================
+
+export async function deleteFacilityRequestHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const result = await facilityRequestService.deleteFacilityRequest(
+      req.params.id,
+      user.role,
+      user.position,
+      user.branchId,
     );
 
     res.status(200).json({ success: true, data: result });

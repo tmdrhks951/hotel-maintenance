@@ -68,6 +68,50 @@ export interface AssignWorkerDto {
 // STEP 7 DTOs — 작업 완료 등록
 // ================================================================
 
+// ================================================================
+// 시설 요청 수정 DTO
+// ================================================================
+
+export interface UpdateFacilityRequestDto {
+  title?: string;
+  description?: string;
+  category?: RequestCategory;
+  locationId?: string | null;
+}
+
+// ================================================================
+// STEP 8 DTOs — QC 최종 검토
+// ================================================================
+
+export type QcVerifyAction = 'VERIFY' | 'REOPEN';
+
+export interface QcVerifyDto {
+  action: QcVerifyAction;
+  /// REOPEN 시 필수 사유
+  note?: string;
+}
+
+// ================================================================
+// STEP 8 DTOs — 운영팀 확인
+// ================================================================
+
+export interface OperationsConfirmDto {
+  note?: string;
+}
+
+// ================================================================
+// STEP 11 DTOs — 재오픈
+// ================================================================
+
+export interface ReopenFacilityRequestDto {
+  /// 재오픈 사유 (필수)
+  reason: string;
+}
+
+// ================================================================
+// STEP 7 DTOs — 작업 완료 등록
+// ================================================================
+
 export interface CompleteWorkDto {
   /// 1차 작업 유형 (수리/교체/점검/임시조치/외주/보류)
   workAction: string;

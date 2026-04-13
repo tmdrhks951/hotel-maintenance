@@ -154,3 +154,45 @@ export async function getAssignableUsersHandler(
     next(err);
   }
 }
+
+// GET /api/v1/users/pending
+export async function listPendingUsersHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const users = await userService.listPendingUsers();
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/v1/users/:id/approve
+export async function approveUserHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = await userService.approveUser(req.params.id);
+    res.status(200).json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /api/v1/users/:id/reject
+export async function rejectUserHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = await userService.rejectUser(req.params.id);
+    res.status(200).json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+}

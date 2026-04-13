@@ -2,7 +2,7 @@
 // 공유 타입 — 백엔드 응답 구조와 1:1 매핑
 // ================================================================
 
-export type Role = 'ADMIN' | 'OPERATIONS' | 'QC';
+export type Role = 'ADMIN' | 'OPERATIONS' | 'QC' | 'VENDOR';
 export type Position = 'TEAM_LEADER' | 'DEPUTY_LEADER' | 'MEMBER' | 'OTHER';
 export type LocationType = 'ROOM' | 'PUBLIC_AREA' | 'OFFICE' | 'BACK_OF_HOUSE';
 
@@ -101,6 +101,61 @@ export interface LoginResponse {
   refreshToken: string;
 }
 
+export const POSITION_LABEL: Record<Position, string> = {
+  TEAM_LEADER: '팀장',
+  DEPUTY_LEADER: '부팀장',
+  MEMBER: '팀원',
+  OTHER: '기타',
+};
+
+export type Department = 'OPERATIONS_1' | 'OPERATIONS_2' | 'OPERATIONS_3' | 'QC_1' | 'QC_3' | 'NONE';
+export type UserStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export const DEPARTMENT_LABEL: Record<Department, string> = {
+  OPERATIONS_1: '운영1팀',
+  OPERATIONS_2: '운영2팀',
+  OPERATIONS_3: '운영3팀',
+  QC_1: 'QC1팀',
+  QC_3: 'QC3팀',
+  NONE: '해당없음',
+};
+
+export const USER_STATUS_LABEL: Record<UserStatus, string> = {
+  PENDING: '승인 대기',
+  APPROVED: '승인됨',
+  REJECTED: '거부됨',
+};
+
+export interface PendingUser {
+  id: string;
+  loginId: string | null;
+  email: string;
+  name: string;
+  role: Role;
+  department: Department;
+  position: Position;
+  phone: string | null;
+  branchId: string | null;
+  branch?: { id: string; name: string; code: string } | null;
+  status: UserStatus;
+  createdAt: string;
+}
+
+export interface PasswordResetRequest {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  user: {
+    id: string;
+    loginId: string | null;
+    email: string;
+    name: string;
+    role: Role;
+    department: Department;
+    position: Position;
+  };
+}
+
 // ----------------------------------------------------------------
 // Branch
 // ----------------------------------------------------------------
@@ -111,9 +166,11 @@ export interface Branch {
   code: string;
   address: string | null;
   isActive: boolean;
+  parentId: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: { users: number; locations: number };
+  children?: Branch[];
 }
 
 // ----------------------------------------------------------------
@@ -202,6 +259,8 @@ export interface FacilityRequestDetail extends FacilityRequestCard {
   operationsConfirmedByUserId: string | null;
   operationsConfirmedAt: string | null;
   operationsConfirmedBy: { id: string; name: string } | null;
+  // STEP 11
+  reopenCount: number;
   media: Media[];
   statusLogs: StatusLog[];
 }
@@ -417,6 +476,11 @@ export interface OperationsConfirmBody {
   note?: string;
 }
 
+// STEP 11: 재오픈 body
+export interface ReopenBody {
+  reason: string;
+}
+
 // STEP 7: 완료 등록 body (FormData로 전송)
 export interface CompleteWorkBody {
   workAction: string;
@@ -583,6 +647,126 @@ export interface ListUsersQuery {
   role?: Role;
   branchId?: string;
   isActive?: boolean;
+}
+
+// ----------------------------------------------------------------
+// 반복 점검 스케줄
+// ----------------------------------------------------------------
+
+export type RecurrenceType = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export const RECURRENCE_LABEL: Record<RecurrenceType, string> = {
+  DAILY: '매일',
+  WEEKLY: '매주',
+  MONTHLY: '매월',
+};
+
+export const DAY_OF_WEEK_LABEL = ['일', '월', '화', '수', '목', '금', '토'];
+
+export interface RecurringSchedule {
+  id: string;
+  title: string;
+  description: string;
+  category: RequestCategory;
+  recurrence: RecurrenceType;
+  recurrenceDay: number | null;
+  recurrenceTime: string;
+  isActive: boolean;
+  branchId: string;
+  branch: { id: string; name: string };
+  locationId: string | null;
+  location: { id: string; name: string } | null;
+  createdBy: { id: string; name: string };
+  lastGeneratedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateScheduleBody {
+  title: string;
+  description?: string;
+  category: RequestCategory;
+  recurrence: RecurrenceType;
+  recurrenceDay?: number;
+  recurrenceTime?: string;
+  branchId: string;
+  locationId?: string;
+}
+
+export interface UpdateScheduleBody {
+  title?: string;
+  description?: string;
+  category?: RequestCategory;
+  recurrence?: RecurrenceType;
+  recurrenceDay?: number;
+  recurrenceTime?: string;
+  isActive?: boolean;
+  branchId?: string;
+  locationId?: string;
+}
+
+// ----------------------------------------------------------------
+// STEP 12: 공지 (Notice)
+// ----------------------------------------------------------------
+
+export interface NoticeListItem {
+  id: string;
+  title: string;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+}
+
+export interface NoticeDetail extends NoticeListItem {
+  content: string;
+}
+
+export interface CreateNoticeBody {
+  title: string;
+  content: string;
+  isPublished?: boolean;
+  branchId?: string;
+}
+
+export interface UpdateNoticeBody {
+  title?: string;
+  content?: string;
+  isPublished?: boolean;
+  branchId?: string | null;
+}
+
+// ----------------------------------------------------------------
+// STEP 12: 매뉴얼 (Manual)
+// ----------------------------------------------------------------
+
+export interface ManualListItem {
+  id: string;
+  title: string;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+  author: { id: string; name: string };
+  branch: { id: string; name: string } | null;
+}
+
+export interface ManualDetail extends ManualListItem {
+  content: string;
+}
+
+export interface CreateManualBody {
+  title: string;
+  content: string;
+  isPublished?: boolean;
+  branchId?: string;
+}
+
+export interface UpdateManualBody {
+  title?: string;
+  content?: string;
+  isPublished?: boolean;
+  branchId?: string | null;
 }
 
 // ----------------------------------------------------------------

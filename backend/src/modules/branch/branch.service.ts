@@ -14,6 +14,11 @@ export async function listBranches(query: ListBranchesQuery) {
   // MEMBER 등 단일 지점 접근자 → 본인 branchId만 조회
   if (query.branchIdFilter) where.id = query.branchIdFilter;
 
+  // 최상위(parentId=null)만 조회, children도 함께 가져옴
+  if (!query.branchIdFilter) {
+    where.parentId = null;
+  }
+
   const branches = await prisma.branch.findMany({
     where,
     select: {
@@ -22,11 +27,27 @@ export async function listBranches(query: ListBranchesQuery) {
       code: true,
       address: true,
       isActive: true,
+      parentId: true,
       createdAt: true,
       updatedAt: true,
       _count: { select: { users: true, locations: true } },
+      children: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          address: true,
+          isActive: true,
+          parentId: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { users: true, locations: true } },
+        },
+        orderBy: { sortOrder: 'asc' },
+      },
     },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { sortOrder: 'asc' },
   });
 
   return branches;
@@ -45,9 +66,22 @@ export async function getBranch(id: string) {
       code: true,
       address: true,
       isActive: true,
+      parentId: true,
       createdAt: true,
       updatedAt: true,
       _count: { select: { users: true, locations: true } },
+      children: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          isActive: true,
+          parentId: true,
+          _count: { select: { users: true, locations: true } },
+        },
+        orderBy: { sortOrder: 'asc' },
+      },
     },
   });
 

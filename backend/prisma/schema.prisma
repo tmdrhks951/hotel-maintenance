@@ -15,6 +15,7 @@ enum Role {
   ADMIN
   OPERATIONS
   QC
+  VENDOR
 }
 
 enum Position {
@@ -23,6 +24,29 @@ enum Position {
   MEMBER
   OTHER
 }
+
+/// [AUTH STEP ADD START]
+enum UserStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Department {
+  OPERATIONS_1
+  OPERATIONS_2
+  OPERATIONS_3
+  QC_1
+  QC_3
+  NONE
+}
+
+enum ResetRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+/// [AUTH STEP ADD END]
 
 enum FacilityRequestStatus {
   PENDING              // 레거시 — STEP 5 이전 데이터 하위 호환
@@ -101,15 +125,29 @@ model User {
   position     Position  @default(MEMBER)
   isActive     Boolean   @default(true)
 
+  /// [AUTH STEP ADD START]
+  loginId            String?      @unique
+  phone              String?
+  status             UserStatus   @default(APPROVED)
+  department         Department   @default(NONE)
+  securityQuestion1  String?
+  securityAnswer1    String?      /// bcrypt 해시 저장
+  securityQuestion2  String?
+  securityAnswer2    String?      /// bcrypt 해시 저장
+  /// [AUTH STEP ADD END]
+
   /// ADMIN은 null 허용. OPERATIONS / QC는 application 레벨에서 필수 강제.
-  branchId String?
-  branch   Branch? @relation(fields: [branchId], references: [id])
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id])
+  /// 다중 지점 담당 (운영팀 팀원 전용) — branchId는 primary, branchIds는 전체 목록
+  branchIds String[] @default([])
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   // Relations
+  createdSchedules  RecurringSchedule[] @relation("ScheduleCreatedBy")
   createdRequests   FacilityRequest[]  @relation("RequestCreatedBy")
   assignedRequests  FacilityRequest[]  @relation("RequestAssignedTo")
   /// STEP 6: 긴급 전환 처리자
@@ -128,6 +166,10 @@ model User {
   notices           Notice[]
   manuals           Manual[]
   refreshTokens     RefreshToken[]
+  /// [AUTH STEP ADD START]
+  passwordResetRequests  PasswordResetRequest[]
+  reviewedPasswordResets PasswordResetRequest[] @relation("ReviewedBy")
+  /// [AUTH STEP ADD END]
 
   @@index([branchId])
   @@map("users")
@@ -155,22 +197,27 @@ model RefreshToken {
 // ================================================================
 
 model Branch {
-  id       String  @id @default(cuid())
-  name     String
-  code     String  @unique
-  address  String?
-  isActive Boolean @default(true)
+  id        String  @id @default(cuid())
+  name      String
+  code      String  @unique
+  address   String?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+  parentId  String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   // Relations
-  users            User[]
-  locations        Location[]
-  facilityRequests FacilityRequest[]
-  notices          Notice[]
-  manuals          Manual[]
+  parent             Branch?  @relation("BranchHierarchy", fields: [parentId], references: [id])
+  children           Branch[] @relation("BranchHierarchy")
+  users              User[]
+  locations          Location[]
+  facilityRequests   FacilityRequest[]
+  recurringSchedules RecurringSchedule[]
+  notices            Notice[]
+  manuals            Manual[]
 
   @@map("branches")
 }
@@ -193,7 +240,8 @@ model Location {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  facilityRequests FacilityRequest[]
+  facilityRequests   FacilityRequest[]
+  recurringSchedules RecurringSchedule[]
 
   @@unique([branchId, code])
   @@index([branchId])
@@ -245,6 +293,9 @@ model FacilityRequest {
   operationsConfirmedByUserId String?
   operationsConfirmedBy       User?     @relation("RequestOperationsConfirmedBy", fields: [operationsConfirmedByUserId], references: [id])
   operationsConfirmedAt       DateTime?
+
+  /// STEP 11: 재오픈 횟수
+  reopenCount Int @default(0)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -400,6 +451,49 @@ model Notice {
 }
 
 // ================================================================
+// RecurringSchedule (반복 점검 스케줄)
+// ================================================================
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model RecurringSchedule {
+  id          String          @id @default(cuid())
+  title       String
+  description String          @default("")
+  category    RequestCategory @default(OTHER)
+  recurrence  RecurrenceType
+  /// WEEKLY: 0(일)~6(토), MONTHLY: 1~31
+  recurrenceDay Int?
+  /// 해당 요일/일자에 생성할 시각 (HH:mm, 24h)
+  recurrenceTime String       @default("09:00")
+  isActive    Boolean         @default(true)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id])
+
+  createdById String
+  createdBy   User @relation("ScheduleCreatedBy", fields: [createdById], references: [id])
+
+  /// 마지막으로 FacilityRequest를 자동 생성한 날짜
+  lastGeneratedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([branchId])
+  @@index([isActive])
+  @@map("recurring_schedules")
+}
+
+// ================================================================
 // Manual
 // ================================================================
 
@@ -422,3 +516,25 @@ model Manual {
   @@index([branchId])
   @@map("manuals")
 }
+
+/// [AUTH STEP ADD START]
+// ================================================================
+// PasswordResetRequest — 비밀번호 재설정 요청 (관리자 승인형)
+// ================================================================
+
+model PasswordResetRequest {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  status       ResetRequestStatus @default(PENDING)
+  reviewedById String?
+  reviewedBy   User?              @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  note         String?
+  createdAt    DateTime           @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("password_reset_requests")
+}
+/// [AUTH STEP ADD END]

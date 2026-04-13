@@ -275,3 +275,95 @@ export async function getAssignableUsers(branchId: string) {
 
   return users;
 }
+
+// ================================================================
+// listPendingUsers — 승인 대기 사용자 목록 (ADMIN)
+// ================================================================
+
+export async function listPendingUsers() {
+  const users = await prisma.user.findMany({
+    where: { deletedAt: null, status: 'PENDING' },
+    select: {
+      id: true,
+      loginId: true,
+      email: true,
+      name: true,
+      role: true,
+      department: true,
+      position: true,
+      phone: true,
+      branchId: true,
+      branch: { select: { id: true, name: true, code: true } },
+      status: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+  return users;
+}
+
+// ================================================================
+// approveUser — 사용자 승인 (ADMIN)
+// ================================================================
+
+export async function approveUser(id: string) {
+  const user = await prisma.user.findFirst({
+    where: { id, deletedAt: null },
+  });
+
+  if (!user) {
+    throw new AppError('사용자를 찾을 수 없습니다', 404, true, 'USER_NOT_FOUND');
+  }
+  if (user.status !== 'PENDING') {
+    throw new AppError('승인 대기 상태가 아닙니다', 400, true, 'NOT_PENDING');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { status: 'APPROVED', isActive: true },
+    select: {
+      id: true,
+      loginId: true,
+      email: true,
+      name: true,
+      role: true,
+      status: true,
+      isActive: true,
+    },
+  });
+
+  return updated;
+}
+
+// ================================================================
+// rejectUser — 사용자 거부 (ADMIN)
+// ================================================================
+
+export async function rejectUser(id: string) {
+  const user = await prisma.user.findFirst({
+    where: { id, deletedAt: null },
+  });
+
+  if (!user) {
+    throw new AppError('사용자를 찾을 수 없습니다', 404, true, 'USER_NOT_FOUND');
+  }
+  if (user.status !== 'PENDING') {
+    throw new AppError('승인 대기 상태가 아닙니다', 400, true, 'NOT_PENDING');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: { status: 'REJECTED', isActive: false },
+    select: {
+      id: true,
+      loginId: true,
+      email: true,
+      name: true,
+      role: true,
+      status: true,
+      isActive: true,
+    },
+  });
+
+  return updated;
+}

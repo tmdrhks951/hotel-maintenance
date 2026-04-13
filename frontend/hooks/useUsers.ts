@@ -6,6 +6,7 @@ import type {
   CreateUserBody,
   UpdateUserBody,
   ListUsersQuery,
+  PendingUser,
 } from '@/types';
 
 // ================================================================
@@ -88,6 +89,54 @@ export function useDeactivateUser() {
   return useMutation({
     mutationFn: async (id: string) => {
       await apiClient.delete(`/users/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+// ================================================================
+// 승인 대기 사용자 목록
+// ================================================================
+
+export function usePendingUsers() {
+  return useQuery({
+    queryKey: ['users', 'pending'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ApiResponse<PendingUser[]>>('/users/pending');
+      return data.data;
+    },
+  });
+}
+
+// ================================================================
+// 사용자 승인
+// ================================================================
+
+export function useApproveUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.patch<ApiResponse<unknown>>(`/users/${id}/approve`);
+      return data.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+}
+
+// ================================================================
+// 사용자 거부
+// ================================================================
+
+export function useRejectUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await apiClient.patch<ApiResponse<unknown>>(`/users/${id}/reject`);
+      return data.data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] });

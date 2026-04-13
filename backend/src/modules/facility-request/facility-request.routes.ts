@@ -18,6 +18,11 @@ import {
   getOperationsPendingHandler,
   operationsConfirmHandler,
   getQcHistoryHandler,
+  updateFacilityRequestHandler,
+  deleteFacilityRequestHandler,
+  reopenFacilityRequestHandler,
+  getOperationsDashboardHandler,
+  getWorkHistoryHandler,
 } from './facility-request.controller';
 import {
   getCommentsHandler,
@@ -43,11 +48,17 @@ router.get('/qc-queue', authorize(Role.QC, Role.ADMIN), getQcQueueHandler);
 // GET /facility-requests/qc-completed  (STEP 8 — QC/ADMIN)
 router.get('/qc-completed', authorize(Role.QC, Role.ADMIN), getQcCompletedHandler);
 
-// GET /facility-requests/operations-pending  (STEP 8 — OPERATIONS/ADMIN)
-router.get('/operations-pending', authorize(Role.OPERATIONS, Role.ADMIN), getOperationsPendingHandler);
+// GET /facility-requests/operations-pending  (STEP 8 — OPERATIONS/ADMIN/VENDOR)
+router.get('/operations-pending', authorize(Role.OPERATIONS, Role.ADMIN, Role.VENDOR), getOperationsPendingHandler);
 
 // GET /facility-requests/qc-history  (STEP 9 — QC/ADMIN)
 router.get('/qc-history', authorize(Role.QC, Role.ADMIN), getQcHistoryHandler);
+
+// GET /facility-requests/operations-dashboard  (OPERATIONS/ADMIN/VENDOR)
+router.get('/operations-dashboard', authorize(Role.OPERATIONS, Role.ADMIN, Role.VENDOR), getOperationsDashboardHandler);
+
+// GET /facility-requests/work-history  (QC/OPERATIONS/ADMIN)
+router.get('/work-history', getWorkHistoryHandler);
 
 // POST /facility-requests  (STEP 5 — multipart/form-data)
 router.post(
@@ -67,8 +78,8 @@ router.post(
 // /:id 파라미터 경로
 // ----------------------------------------------------------------
 
-// GET /facility-requests/:id  (STEP 6/8 — QC/OPERATIONS/ADMIN)
-router.get('/:id', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), getFacilityRequestDetailHandler);
+// GET /facility-requests/:id  (STEP 6/8 — QC/OPERATIONS/ADMIN/VENDOR)
+router.get('/:id', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN, Role.VENDOR), getFacilityRequestDetailHandler);
 
 // PATCH /facility-requests/:id/qc-review  (STEP 6 — QC/ADMIN)
 router.patch('/:id/qc-review', authorize(Role.QC, Role.ADMIN), qcReviewHandler);
@@ -85,6 +96,9 @@ router.patch('/:id/qc-verify', authorize(Role.QC, Role.ADMIN), qcVerifyHandler);
 // PATCH /facility-requests/:id/operations-confirm  (STEP 8 — OPERATIONS/ADMIN)
 router.patch('/:id/operations-confirm', authorize(Role.OPERATIONS, Role.ADMIN), operationsConfirmHandler);
 
+// PATCH /facility-requests/:id/reopen  (STEP 11 — QC/OPERATIONS/ADMIN)
+router.patch('/:id/reopen', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), reopenFacilityRequestHandler);
+
 // POST /facility-requests/:id/complete  (STEP 7 — QC/ADMIN, multipart/form-data)
 router.post(
   '/:id/complete',
@@ -99,6 +113,12 @@ router.post(
   },
   completeWorkHandler,
 );
+
+// PATCH /facility-requests/:id  (수정 — ADMIN + QC/OPERATIONS 팀장급, 서비스에서 position 체크)
+router.patch('/:id', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), updateFacilityRequestHandler);
+
+// DELETE /facility-requests/:id  (삭제 — ADMIN + QC/OPERATIONS 팀장급, 서비스에서 position 체크)
+router.delete('/:id', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), deleteFacilityRequestHandler);
 
 // ----------------------------------------------------------------
 // 댓글 (STEP 9) — 모든 인증 사용자
