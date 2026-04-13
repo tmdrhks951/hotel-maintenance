@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import NotificationBell from '@/components/notification/NotificationBell';
 import QuickCreateFab from '@/components/ui/QuickCreateFab';
+import { useSse } from '@/hooks/useSse';
 import type { ApiResponse, AuthUser, Role } from '@/types';
 import { ROLE_LABEL } from '@/types';
 
@@ -56,6 +57,9 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const { setUser, user: appUser } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+
+  // SSE 실시간 알림 연결
+  useSse();
 
   // 1) localStorage에서 인증 정보 복원
   useEffect(() => {

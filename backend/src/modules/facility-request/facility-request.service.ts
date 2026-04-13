@@ -266,13 +266,12 @@ export async function createFacilityRequest(
 
     let media = null;
     if (file) {
-      const serverBaseUrl = process.env.SERVER_BASE_URL ?? 'http://localhost:4000';
       const isVideo = file.mimetype.startsWith('video/');
       media = await tx.media.create({
         data: {
           type: isVideo ? 'VIDEO' : 'IMAGE',
           phase: 'BEFORE',
-          url: `${serverBaseUrl}/uploads/${file.filename}`,
+          url: `/uploads/${file.filename}`,
           filename: file.originalname,
           size: file.size,
           requestId: request.id,
@@ -420,6 +419,7 @@ export async function qcReview(
       plannedWorkDate: true,
       isEmergency: true,
       assignedToId: true,
+      createdById: true,
     },
   });
 
@@ -507,19 +507,20 @@ export async function qcReview(
       .catch(() => {});
   }
 
-  // RECEIVE / START_WORK — 운영팀 + QC 대시보드 실시간 갱신
+  // RECEIVE / START_WORK — 운영팀 + QC + 요청 생성자에게 알림
   if (dto.action === 'RECEIVE' || dto.action === 'START_WORK') {
     getNotificationRecipients(request.branchId, 'STATUS_CHANGED')
-      .then((ids) =>
-        fanOut({
+      .then((scopeIds) => {
+        const recipients = [...new Set([...scopeIds, request.createdById])];
+        return fanOut({
           type: 'STATUS_CHANGED',
-          recipientIds: ids,
+          recipientIds: recipients,
           requestId,
           title: dto.action === 'RECEIVE'
             ? `수령 완료: ${updated.title}`
             : `작업 시작: ${updated.title}`,
-        }),
-      )
+        });
+      })
       .catch(() => {});
   }
 
@@ -737,15 +738,13 @@ export async function completeWork(
     : dto.generatedText;
 
   const updated = await prisma.$transaction(async (tx) => {
-    const serverBaseUrl = process.env.SERVER_BASE_URL ?? 'http://localhost:4000';
-
     // AFTER 사진/영상 저장
     const isVideo = file.mimetype.startsWith('video/');
     await tx.media.create({
       data: {
         type: isVideo ? 'VIDEO' : 'IMAGE',
         phase: 'AFTER',
-        url: `${serverBaseUrl}/uploads/${file.filename}`,
+        url: `/uploads/${file.filename}`,
         filename: file.originalname,
         size: file.size,
         requestId,

@@ -10,7 +10,7 @@ export function useNotifications(unreadOnly?: boolean) {
       const { data } = await apiClient.get<ApiResponse<Notification[]>>('/notifications', { params });
       return data.data;
     },
-    refetchInterval: 30_000,
+    refetchInterval: 60_000, // SSE가 실시간 처리, 폴링은 백업
   });
 }
 
@@ -21,7 +21,7 @@ export function useUnreadCount() {
       const { data } = await apiClient.get<ApiResponse<number>>('/notifications/unread-count');
       return data.data;
     },
-    refetchInterval: 15_000,
+    refetchInterval: 60_000, // SSE가 실시간 처리, 폴링은 백업
   });
 }
 
