@@ -119,6 +119,7 @@ export interface AuthUser {
   position: Position;
   department: Department;
   branchId: string | null;
+  branchIds: string[];
   isActive: boolean;
 }
 
