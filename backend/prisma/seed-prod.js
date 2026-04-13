@@ -6,6 +6,19 @@ const prisma = new PrismaClient();
 
 async function main() {
   // ================================================================
+  // 0. 기존 테스트 시설요청 정리 (구 URL 미디어 포함 — 1회성)
+  // ================================================================
+  const oldMedia = await prisma.media.findFirst({ where: { url: { startsWith: 'http' } } });
+  if (oldMedia) {
+    console.log('🔄 Cleaning old facility requests with broken media URLs...');
+    await prisma.media.deleteMany({});
+    await prisma.statusLog.deleteMany({});
+    await prisma.notification.deleteMany({});
+    await prisma.facilityRequest.deleteMany({});
+    console.log('✅ Old facility requests & media cleaned');
+  }
+
+  // ================================================================
   // 1. Admin 계정
   // ================================================================
   const existing = await prisma.user.findFirst({ where: { email: 'admin@hotel.com' } });
