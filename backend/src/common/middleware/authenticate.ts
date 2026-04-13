@@ -32,6 +32,7 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
       role: payload.role,
       position: payload.position,
       branchId: payload.branchId,
+      branchIds: payload.branchIds,
     };
     next();
   } catch (err) {

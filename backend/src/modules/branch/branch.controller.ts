@@ -20,20 +20,20 @@ function assertBranchAccess(req: Request, branchId: string): void {
   const user = req.user!;
   if (user.role === 'ADMIN') return;
   if (user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER') return;
-  if (user.branchId !== branchId) {
-    throw new AppError('해당 지점에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
-  }
+  // branchIds 배열에 포함되어 있으면 허용
+  if (user.branchIds.includes(branchId)) return;
+  throw new AppError('해당 지점에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
 }
 
 /**
- * 목록 조회 시 MEMBER·OTHER에게 적용할 branchId 필터를 반환한다.
+ * 목록 조회 시 MEMBER·OTHER에게 적용할 branchIds 필터를 반환한다.
  * ADMIN·TEAM_LEADER·DEPUTY_LEADER는 undefined(전체 조회).
  */
-function getBranchIdFilter(req: Request): string | undefined {
+function getBranchIdsFilter(req: Request): string[] | undefined {
   const user = req.user!;
   if (user.role === 'ADMIN') return undefined;
   if (user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER') return undefined;
-  return user.branchId ?? undefined;
+  return user.branchIds.length > 0 ? user.branchIds : undefined;
 }
 
 // ================================================================
@@ -52,7 +52,7 @@ export async function listBranchesHandler(
 
     const branches = await branchService.listBranches({
       isActive,
-      branchIdFilter: getBranchIdFilter(req),
+      branchIdsFilter: getBranchIdsFilter(req),
     });
     res.status(200).json({ success: true, data: branches });
   } catch (err) {

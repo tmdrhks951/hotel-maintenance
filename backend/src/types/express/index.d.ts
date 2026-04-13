@@ -12,6 +12,7 @@ declare global {
         role: Role;
         position: Position;
         branchId: string | null;
+        branchIds: string[];
       };
     }
   }

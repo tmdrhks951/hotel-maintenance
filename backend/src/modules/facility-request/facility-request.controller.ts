@@ -56,7 +56,7 @@ export async function getQcQueueHandler(
 
     const result = await facilityRequestService.getQcQueue(
       user.role,
-      user.branchId,
+      user.branchIds,
       filterBranchId,
     );
 
@@ -85,7 +85,7 @@ export async function getFacilityRequestDetailHandler(
     const result = await facilityRequestService.getFacilityRequestDetail(
       req.params.id,
       user.role,
-      user.branchId,
+      user.branchIds,
     );
 
     res.status(200).json({ success: true, data: result });
@@ -151,7 +151,7 @@ export async function createFacilityRequestHandler(
       user.id,
       user.role,
       user.position,
-      user.branchId,
+      user.branchIds,
       {
         branchId,
         locationId: locationId || undefined,
@@ -189,7 +189,7 @@ export async function qcReviewHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -229,7 +229,7 @@ export async function updateScheduleHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -279,7 +279,7 @@ export async function completeWorkHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
       req.file,
     );
@@ -320,7 +320,7 @@ export async function assignWorkerHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -351,7 +351,7 @@ export async function getQcCompletedHandler(
 
     const result = await facilityRequestService.getQcCompleted(
       user.role,
-      user.branchId,
+      user.branchIds,
       filterBranchId,
     );
 
@@ -391,7 +391,7 @@ export async function qcVerifyHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -422,7 +422,7 @@ export async function getOperationsPendingHandler(
 
     const result = await facilityRequestService.getOperationsPending(
       user.role,
-      user.branchId,
+      user.branchIds,
       filterBranchId,
     );
 
@@ -454,7 +454,7 @@ export async function operationsConfirmHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -485,7 +485,7 @@ export async function getQcHistoryHandler(
 
     const result = await facilityRequestService.getQcHistory(
       user.role,
-      user.branchId,
+      user.branchIds,
       filterBranchId,
     );
 
@@ -516,7 +516,7 @@ export async function getOperationsDashboardHandler(
 
     const result = await facilityRequestService.getOperationsDashboard(
       user.role,
-      user.branchId,
+      user.branchIds,
       filterBranchId,
     );
 
@@ -544,7 +544,7 @@ export async function getWorkHistoryHandler(
 
     const result = await facilityRequestService.getWorkHistory(
       user.role,
-      user.branchId,
+      user.branchIds,
       {
         date: typeof req.query.date === 'string' ? req.query.date : undefined,
         startDate: typeof req.query.startDate === 'string' ? req.query.startDate : undefined,
@@ -583,7 +583,7 @@ export async function updateFacilityRequestHandler(
       user.id,
       user.role,
       user.position,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -623,7 +623,7 @@ export async function reopenFacilityRequestHandler(
       req.params.id,
       user.id,
       user.role,
-      user.branchId,
+      user.branchIds,
       dto,
     );
 
@@ -653,7 +653,7 @@ export async function deleteFacilityRequestHandler(
       req.params.id,
       user.role,
       user.position,
-      user.branchId,
+      user.branchIds,
     );
 
     res.status(200).json({ success: true, data: result });

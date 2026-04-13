@@ -11,6 +11,7 @@ export interface JwtAccessPayload {
   role: Role;
   position: Position;
   branchId: string | null;
+  branchIds: string[];
 }
 
 export interface JwtRefreshPayload {
@@ -32,6 +33,7 @@ export function signAccessToken(payload: JwtAccessPayload): string {
       role: payload.role,
       position: payload.position,
       branchId: payload.branchId,
+      branchIds: payload.branchIds,
     },
     env.JWT_ACCESS_SECRET,
     options,
@@ -56,17 +58,20 @@ export function verifyAccessToken(token: string): JwtAccessPayload {
     role: Role;
     position: Position;
     branchId: string | null;
+    branchIds?: string[];
   };
 
   if (!decoded.sub || !decoded.role || !decoded.position) {
     throw new Error('Invalid token payload');
   }
 
+  const branchId = decoded.branchId ?? null;
   return {
     sub: decoded.sub,
     role: decoded.role,
     position: decoded.position,
-    branchId: decoded.branchId ?? null,
+    branchId,
+    branchIds: decoded.branchIds ?? (branchId ? [branchId] : []),
   };
 }
 

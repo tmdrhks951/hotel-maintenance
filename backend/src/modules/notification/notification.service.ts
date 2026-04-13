@@ -1,7 +1,7 @@
 import type { Department, NotificationType } from '@prisma/client';
 import { prisma } from '@/config/prisma';
 import { sseManager } from '@/common/sse/SseManager';
-import { DEPARTMENT_BRANCH_SCOPE } from '@/config/branch-scope';
+import { DEPARTMENT_BRANCH_CODES } from '@/config/branch-scope';
 
 // ================================================================
 // fan-out 입력 타입
@@ -82,7 +82,7 @@ export async function getNotificationRecipients(
       // VENDOR: 알림 없음
       if (user.role !== 'OPERATIONS' && user.role !== 'QC') return false;
 
-      const scope = DEPARTMENT_BRANCH_SCOPE[user.department as Department] ?? [];
+      const scope = DEPARTMENT_BRANCH_CODES[user.department as Department] ?? [];
       const isLeader =
         user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER';
 
@@ -114,7 +114,7 @@ export async function getQcUserIds(branchId: string): Promise<string[]> {
 
   return users
     .filter((user) => {
-      const scope = DEPARTMENT_BRANCH_SCOPE[user.department as Department] ?? [];
+      const scope = DEPARTMENT_BRANCH_CODES[user.department as Department] ?? [];
       const isLeader =
         user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER';
       if (isLeader) return scope.includes(branchCode);

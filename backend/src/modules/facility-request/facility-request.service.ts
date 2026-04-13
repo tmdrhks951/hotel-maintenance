@@ -69,12 +69,12 @@ function assertValidTransition(from: string, to: string): void {
 function assertBranchAccess(
   role: string,
   position: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   targetBranchId: string,
 ): void {
   if (role === 'ADMIN') return;
   if (position === 'TEAM_LEADER' || position === 'DEPUTY_LEADER') return;
-  if (userBranchId !== targetBranchId) {
+  if (!userBranchIds.includes(targetBranchId)) {
     throw new AppError('해당 지점에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
   }
 }
@@ -96,11 +96,11 @@ function assertOperationsAccess(role: string): void {
 /** QC의 지점 접근 제어 — ADMIN은 모든 지점 허용 */
 function assertQcBranchAccess(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   requestBranchId: string,
 ): void {
   if (role === 'ADMIN') return;
-  if (userBranchId !== requestBranchId) {
+  if (!userBranchIds.includes(requestBranchId)) {
     throw new AppError('해당 지점 요청에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
   }
 }
@@ -199,11 +199,11 @@ export async function createFacilityRequest(
   userId: string,
   userRole: string,
   userPosition: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: CreateFacilityRequestDto,
   file?: Express.Multer.File,
 ) {
-  assertBranchAccess(userRole, userPosition, userBranchId, dto.branchId);
+  assertBranchAccess(userRole, userPosition, userBranchIds, dto.branchId);
 
   const branch = await prisma.branch.findFirst({
     where: { id: dto.branchId, deletedAt: null, isActive: true },
@@ -310,22 +310,21 @@ export async function createFacilityRequest(
 
 export async function getQcQueue(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   filterBranchId?: string,
 ) {
   assertQcAccess(role);
 
   // 지점 필터: QC는 자신의 지점만, ADMIN은 파라미터 지점 or 전체
-  let branchId: string | undefined;
-  if (role === 'QC') {
-    branchId = userBranchId ?? undefined;
-  } else if (filterBranchId) {
-    branchId = filterBranchId;
-  }
+  const branchWhere = (role === 'QC' && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : filterBranchId
+    ? { branchId: filterBranchId }
+    : {};
 
   const baseWhere = {
     deletedAt: null,
-    ...(branchId ? { branchId } : {}),
+    ...branchWhere,
   };
 
   const cardSelect = {
@@ -377,7 +376,7 @@ export async function getQcQueue(
 export async function getFacilityRequestDetail(
   requestId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
 ) {
   // QC, OPERATIONS, ADMIN 모두 접근 가능
   if (role !== 'QC' && role !== 'OPERATIONS' && role !== 'ADMIN') {
@@ -394,7 +393,7 @@ export async function getFacilityRequestDetail(
   }
 
   // ADMIN은 모든 지점 접근 허용
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   return request;
 }
@@ -407,7 +406,7 @@ export async function qcReview(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: QcReviewDto,
 ) {
   assertQcAccess(role);
@@ -428,7 +427,7 @@ export async function qcReview(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   // 긴급 설정 시 사유 필수
   if (dto.isEmergency === true && !dto.emergencyReason?.trim()) {
@@ -535,7 +534,7 @@ export async function updateSchedule(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: UpdateScheduleDto,
 ) {
   assertQcAccess(role);
@@ -549,7 +548,7 @@ export async function updateSchedule(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   // 일정 설정 가능 상태 검증
   const schedulableStatuses = ['RECEIVED', 'SCHEDULED', 'IN_PROGRESS'];
@@ -641,7 +640,7 @@ export async function assignWorker(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: AssignWorkerDto,
 ) {
   assertQcAccess(role);
@@ -655,7 +654,7 @@ export async function assignWorker(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   // 종료된 요청에는 배정 불가
   const terminalStatuses = ['CLOSED', 'CANCELLED', 'COMPLETED'];
@@ -703,7 +702,7 @@ export async function completeWork(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: CompleteWorkDto,
   file?: Express.Multer.File,
 ) {
@@ -718,7 +717,7 @@ export async function completeWork(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   if (request.status !== 'IN_PROGRESS') {
     throw new AppError(
@@ -799,21 +798,20 @@ export async function completeWork(
 
 export async function getQcCompleted(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   filterBranchId?: string,
 ) {
   assertQcAccess(role);
 
-  let branchId: string | undefined;
-  if (role === 'QC') {
-    branchId = userBranchId ?? undefined;
-  } else if (filterBranchId) {
-    branchId = filterBranchId;
-  }
+  const branchWhere = (role === 'QC' && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : filterBranchId
+    ? { branchId: filterBranchId }
+    : {};
 
   const baseWhere = {
     deletedAt: null,
-    ...(branchId ? { branchId } : {}),
+    ...branchWhere,
   };
 
   const cardSelect = {
@@ -853,7 +851,7 @@ export async function qcVerify(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: QcVerifyDto,
 ) {
   assertQcAccess(role);
@@ -867,7 +865,7 @@ export async function qcVerify(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   if (request.status !== 'DONE_BY_QC') {
     throw new AppError(
@@ -953,21 +951,20 @@ export async function qcVerify(
 
 export async function getOperationsPending(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   filterBranchId?: string,
 ) {
   assertOperationsAccess(role);
 
-  let branchId: string | undefined;
-  if (role === 'OPERATIONS') {
-    branchId = userBranchId ?? undefined;
-  } else if (filterBranchId) {
-    branchId = filterBranchId;
-  }
+  const branchWhere = (role === 'OPERATIONS' && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : filterBranchId
+    ? { branchId: filterBranchId }
+    : {};
 
   const baseWhere = {
     deletedAt: null,
-    ...(branchId ? { branchId } : {}),
+    ...branchWhere,
   };
 
   const cardSelect = {
@@ -1021,23 +1018,22 @@ export async function getOperationsPending(
 
 export async function getQcHistory(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   filterBranchId?: string,
 ) {
   assertQcAccess(role);
 
-  let branchId: string | undefined;
-  if (role === 'QC') {
-    branchId = userBranchId ?? undefined;
-  } else if (filterBranchId) {
-    branchId = filterBranchId;
-  }
+  const branchWhere = (role === 'QC' && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : filterBranchId
+    ? { branchId: filterBranchId }
+    : {};
 
   return prisma.facilityRequest.findMany({
     where: {
       deletedAt: null,
       status: 'CLOSED',
-      ...(branchId ? { branchId } : {}),
+      ...branchWhere,
     },
     select: {
       id: true,
@@ -1070,7 +1066,7 @@ export async function operationsConfirm(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: OperationsConfirmDto,
 ) {
   assertOperationsAccess(role);
@@ -1084,7 +1080,7 @@ export async function operationsConfirm(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   if (request.status !== 'QC_VERIFIED') {
     throw new AppError(
@@ -1150,21 +1146,20 @@ export async function operationsConfirm(
 
 export async function getOperationsDashboard(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   filterBranchId?: string,
 ) {
   assertOperationsAccess(role);
 
-  let branchId: string | undefined;
-  if (role === 'OPERATIONS') {
-    branchId = userBranchId ?? undefined;
-  } else if (filterBranchId) {
-    branchId = filterBranchId;
-  }
+  const branchWhere = (role === 'OPERATIONS' && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : filterBranchId
+    ? { branchId: filterBranchId }
+    : {};
 
   const baseWhere = {
     deletedAt: null,
-    ...(branchId ? { branchId } : {}),
+    ...branchWhere,
   };
 
   const cardSelect = {
@@ -1258,7 +1253,7 @@ interface WorkHistoryParams {
 
 export async function getWorkHistory(
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   params: WorkHistoryParams,
 ) {
   // QC, OPERATIONS, ADMIN 모두 접근 가능
@@ -1266,18 +1261,17 @@ export async function getWorkHistory(
     throw new AppError('권한이 없습니다', 403, true, 'FORBIDDEN');
   }
 
-  let branchId: string | undefined;
-  if (role === 'QC' || role === 'OPERATIONS') {
-    branchId = userBranchId ?? undefined;
-  } else if (params.filterBranchId) {
-    branchId = params.filterBranchId;
-  }
+  const branchWhere = ((role === 'QC' || role === 'OPERATIONS') && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : params.filterBranchId
+    ? { branchId: params.filterBranchId }
+    : {};
 
   // AND 조건 배열 — 각 조건을 독립적으로 구성
   const AND: object[] = [
     { deletedAt: null },
     { status: { in: ['CLOSED', 'OPERATIONS_CONFIRMED'] } },
-    ...(branchId ? [{ branchId }] : []),
+    ...(Object.keys(branchWhere).length > 0 ? [branchWhere] : []),
   ];
 
   // 날짜 필터 — 특정일 또는 범위
@@ -1351,7 +1345,7 @@ export async function updateFacilityRequest(
   userId: string,
   role: string,
   position: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: UpdateFacilityRequestDto,
 ) {
   assertEditPermission(role, position);
@@ -1365,7 +1359,7 @@ export async function updateFacilityRequest(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   const updateData: Record<string, unknown> = {};
   if (dto.title !== undefined) updateData.title = dto.title;
@@ -1390,7 +1384,7 @@ export async function deleteFacilityRequest(
   requestId: string,
   role: string,
   position: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
 ) {
   assertEditPermission(role, position);
 
@@ -1403,7 +1397,7 @@ export async function deleteFacilityRequest(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   await prisma.facilityRequest.update({
     where: { id: requestId },
@@ -1435,7 +1429,7 @@ export async function reopenFacilityRequest(
   requestId: string,
   userId: string,
   role: string,
-  userBranchId: string | null,
+  userBranchIds: string[],
   dto: ReopenFacilityRequestDto,
 ) {
   if (!['QC', 'OPERATIONS', 'ADMIN'].includes(role)) {
@@ -1455,7 +1449,7 @@ export async function reopenFacilityRequest(
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
   }
 
-  assertQcBranchAccess(role, userBranchId, request.branchId);
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
 
   // 역할별 허용 상태 검증
   if (role === 'QC' && request.status !== 'QC_VERIFIED') {

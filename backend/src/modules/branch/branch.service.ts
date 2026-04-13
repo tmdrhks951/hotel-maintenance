@@ -11,11 +11,13 @@ export async function listBranches(query: ListBranchesQuery) {
 
   if (query.isActive !== undefined) where.isActive = query.isActive;
 
-  // MEMBER 등 단일 지점 접근자 → 본인 branchId만 조회
-  if (query.branchIdFilter) where.id = query.branchIdFilter;
+  // 담당 지점 필터 (복수) → 해당 지점만 조회
+  if (query.branchIdsFilter && query.branchIdsFilter.length > 0) {
+    where.id = { in: query.branchIdsFilter };
+  }
 
   // 최상위(parentId=null)만 조회, children도 함께 가져옴
-  if (!query.branchIdFilter) {
+  if (!query.branchIdsFilter) {
     where.parentId = null;
   }
 

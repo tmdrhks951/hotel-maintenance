@@ -88,9 +88,18 @@ export default function SignupPage() {
   const [securityAnswer2, setSecurityAnswer2] = useState('');
 
   // ----------------------------------------------------------------
-  // 지점 자동 묶음 — 트리거 지점 선택 시 연결 지점 자동 선택
-  // key: branch.code, value: 자동 포함될 branch.code[]
+  // 부서별 자동 고정 지점 (팀장급, QC 전체)
   // ----------------------------------------------------------------
+  const DEPT_FIXED_CODES: Record<Department, string[]> = {
+    OPERATIONS_1: ['MYEONGDONG1','MYEONGDONG2','MYEONGDONG3','JONGNO','JONGNO2','SADANG','KAWAUSO1','KAWAUSO2','GUKDO','SOA'],
+    OPERATIONS_2: ['THESEOUL','DEOKSUGUNG','SQUARE','CENTRAL','KAWAUSO3'],
+    OPERATIONS_3: ['GANGNAM','COEX_B','COEX_A','DANDELION','SEOLLEUNG'],
+    QC_1: ['MYEONGDONG1','MYEONGDONG2','MYEONGDONG3','JONGNO','JONGNO2','SADANG','THESEOUL','DEOKSUGUNG','SQUARE','CENTRAL','KAWAUSO1','KAWAUSO2','KAWAUSO3','GUKDO','SOA'],
+    QC_3: ['GANGNAM','COEX_B','COEX_A','DANDELION','SEOLLEUNG'],
+    NONE: [],
+  };
+
+  // 지점 자동 묶음 (운영팀 팀원 수동선택 시 적용)
   const BRANCH_AUTO_LINKS: Record<string, string[]> = {
     MYEONGDONG1: ['GUKDO', 'SOA', 'KAWAUSO2'],
     MYEONGDONG2: ['GUKDO', 'SOA', 'KAWAUSO2'],
@@ -99,59 +108,66 @@ export default function SignupPage() {
     SADANG:      ['KAWAUSO1'],
   };
 
-  // 카와우소 별칭 (회원가입 전용 표시)
+  // 카와우소 별칭
   const KAWAUSO_ALIAS: Record<string, string> = {
     KAWAUSO1: '카와우소 1 (사당)',
     KAWAUSO2: '카와우소 2 (명동)',
     KAWAUSO3: '카와우소 3 (덕수궁)',
   };
 
-  // 회원가입 지점 목록 순서 (상단 고정 코드)
   const SIGNUP_TOP_CODES = ['KAWAUSO1', 'KAWAUSO2', 'KAWAUSO3', 'SOA', 'GUKDO'];
 
-  // 모든 지점을 플랫하게 나열 + 카와우소 별칭 적용
-  const allBranches = (branches ?? []).flatMap((b) => {
-    const children = b.children ?? [];
-    if (children.length === 0) {
-      return [{ ...b, name: KAWAUSO_ALIAS[b.code] ?? b.name }];
-    }
-    // 자식이 있으면 자식만 표시 (부모는 그룹 헤더이므로 제외)
-    return children.map((c) => ({
-      ...c,
-      name: KAWAUSO_ALIAS[c.code] ?? c.name,
-    }));
-  });
+  // 자동 고정 대상인지 판별
+  const isAutoFixed =
+    (role === 'OPERATIONS' && (position === 'TEAM_LEADER' || position === 'DEPUTY_LEADER')) ||
+    role === 'QC';
 
-  // 회원가입 전용 정렬: 상단 고정 → 나머지는 API 순서(sortOrder) 유지
-  const flatBranches = [...allBranches].sort((a, b) => {
-    const ai = SIGNUP_TOP_CODES.indexOf(a.code);
-    const bi = SIGNUP_TOP_CODES.indexOf(b.code);
-    if (ai !== -1 && bi !== -1) return ai - bi;
-    if (ai !== -1) return -1;
-    if (bi !== -1) return 1;
-    return 0;
-  });
+  // 수동 선택 가능 대상: 운영팀 팀원(MEMBER)만
+  const isManualSelect = role === 'OPERATIONS' && position === 'MEMBER';
 
-  // 자동 연결 지점 계산
+  // 플랫 지점 목록 + 별칭 + 정렬
+  const flatBranches = (() => {
+    const all = (branches ?? []).flatMap((b) => {
+      const children = b.children ?? [];
+      if (children.length === 0) return [{ ...b, name: KAWAUSO_ALIAS[b.code] ?? b.name }];
+      return children.map((c) => ({ ...c, name: KAWAUSO_ALIAS[c.code] ?? c.name }));
+    });
+    return [...all].sort((a, b) => {
+      const ai = SIGNUP_TOP_CODES.indexOf(a.code);
+      const bi = SIGNUP_TOP_CODES.indexOf(b.code);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return 0;
+    });
+  })();
+
+  // 자동 고정 시: 부서에 매핑된 코드 → ID 변환
+  const fixedBranchIds = isAutoFixed
+    ? flatBranches.filter((b) => DEPT_FIXED_CODES[department]?.includes(b.code)).map((b) => b.id)
+    : [];
+
+  // 수동 선택 시: 자동 연결 지점 계산
   const autoLinkedIds = new Set<string>();
-  for (const id of selectedBranchIds) {
-    const br = flatBranches.find((b) => b.id === id);
-    if (br && BRANCH_AUTO_LINKS[br.code]) {
-      for (const code of BRANCH_AUTO_LINKS[br.code]) {
-        const linked = flatBranches.find((b) => b.code === code);
-        if (linked) autoLinkedIds.add(linked.id);
+  if (isManualSelect) {
+    for (const id of selectedBranchIds) {
+      const br = flatBranches.find((b) => b.id === id);
+      if (br && BRANCH_AUTO_LINKS[br.code]) {
+        for (const code of BRANCH_AUTO_LINKS[br.code]) {
+          const linked = flatBranches.find((b) => b.code === code);
+          if (linked) autoLinkedIds.add(linked.id);
+        }
       }
     }
   }
 
-  // 화면 표시용 (flatBranches 기준)
-  const displayBranchIds = [...new Set([...selectedBranchIds, ...autoLinkedIds])];
-
-  // 서버 전송용: 선택 + 자동연결 지점 ID 목록
-  const effectiveBranchIds = displayBranchIds;
+  // 최종 지점 ID 목록
+  const effectiveBranchIds = isAutoFixed
+    ? fixedBranchIds
+    : [...new Set([...selectedBranchIds, ...autoLinkedIds])];
 
   function toggleBranch(id: string) {
-    if (autoLinkedIds.has(id)) return; // 자동 연결된 지점은 직접 토글 불가
+    if (autoLinkedIds.has(id)) return;
     setSelectedBranchIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
@@ -220,7 +236,7 @@ export default function SignupPage() {
   }
 
   // 운영팀 팀원은 담당 지점 필수
-  const isBranchRequired = role === 'OPERATIONS' && position === 'MEMBER';
+  const isBranchRequired = isManualSelect;
 
   function validateStep3() {
     if (isBranchRequired && effectiveBranchIds.length === 0) return '운영팀 팀원은 담당 지점을 선택해주세요';
@@ -532,52 +548,73 @@ export default function SignupPage() {
               </select>
             </div>
 
-            {/* 담당 지점 — 운영팀 팀원은 필수(다중), 나머지는 선택 */}
+            {/* 담당 지점 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {isBranchRequired ? (
+                {isAutoFixed ? (
+                  <>담당 지점 <span className="font-normal text-gray-400 text-xs">(부서별 자동 지정)</span></>
+                ) : isBranchRequired ? (
                   <>담당 지점 <span className="text-red-500">*</span> <span className="font-normal text-gray-400 text-xs">(복수 선택 가능)</span></>
                 ) : (
                   <>소속 지점 <span className="font-normal text-gray-400 text-xs">(선택, 복수 가능)</span></>
                 )}
               </label>
-              <div className={`border rounded px-3 py-2 max-h-44 overflow-y-auto space-y-1.5 ${
-                isBranchRequired && effectiveBranchIds.length === 0 ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
-              }`}>
-                {flatBranches.length === 0 && (
-                  <p className="text-xs text-gray-400 py-1">지점 목록을 불러오는 중...</p>
-                )}
-                {flatBranches.map((b) => {
-                  const isAuto = autoLinkedIds.has(b.id);
-                  const isChecked = displayBranchIds.includes(b.id);
-                  return (
-                    <label
-                      key={b.id}
-                      className={`flex items-center gap-2 cursor-pointer select-none ${isAuto ? 'opacity-60' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleBranch(b.id)}
-                        disabled={isAuto}
-                        className="accent-blue-600"
-                      />
-                      <span className="text-sm text-gray-700">{b.name}</span>
-                      {isAuto && (
-                        <span className="text-xs text-blue-500 font-medium">자동</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-              {displayBranchIds.length > 0 && (
-                <p className="text-xs text-blue-600 mt-1">
-                  선택된 지점 {displayBranchIds.length}개
-                  {autoLinkedIds.size > 0 && ` (자동 포함 ${autoLinkedIds.size}개)`}
-                </p>
-              )}
-              {isBranchRequired && effectiveBranchIds.length === 0 && (
-                <p className="text-xs text-red-500 mt-1">운영팀 팀원은 담당 지점을 반드시 선택해야 합니다</p>
+
+              {isAutoFixed ? (
+                /* 자동 고정: 읽기 전용 목록 */
+                <div className="border border-blue-200 bg-blue-50 rounded px-3 py-2 max-h-44 overflow-y-auto space-y-1">
+                  {fixedBranchIds.length === 0 && (
+                    <p className="text-xs text-gray-400 py-1">지점 목록을 불러오는 중...</p>
+                  )}
+                  {flatBranches.filter((b) => fixedBranchIds.includes(b.id)).map((b) => (
+                    <div key={b.id} className="flex items-center gap-2">
+                      <span className="text-sm text-blue-700">{b.name}</span>
+                    </div>
+                  ))}
+                  <p className="text-xs text-blue-500 mt-1">{fixedBranchIds.length}개 지점 자동 지정</p>
+                </div>
+              ) : (
+                /* 수동 선택: 체크박스 목록 */
+                <>
+                  <div className={`border rounded px-3 py-2 max-h-44 overflow-y-auto space-y-1.5 ${
+                    isBranchRequired && effectiveBranchIds.length === 0 ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                  }`}>
+                    {flatBranches.length === 0 && (
+                      <p className="text-xs text-gray-400 py-1">지점 목록을 불러오는 중...</p>
+                    )}
+                    {flatBranches.map((b) => {
+                      const isAuto = autoLinkedIds.has(b.id);
+                      const isChecked = selectedBranchIds.includes(b.id) || isAuto;
+                      return (
+                        <label
+                          key={b.id}
+                          className={`flex items-center gap-2 cursor-pointer select-none ${isAuto ? 'opacity-60' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => toggleBranch(b.id)}
+                            disabled={isAuto}
+                            className="accent-blue-600"
+                          />
+                          <span className="text-sm text-gray-700">{b.name}</span>
+                          {isAuto && (
+                            <span className="text-xs text-blue-500 font-medium">자동</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {effectiveBranchIds.length > 0 && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      선택된 지점 {effectiveBranchIds.length}개
+                      {autoLinkedIds.size > 0 && ` (자동 포함 ${autoLinkedIds.size}개)`}
+                    </p>
+                  )}
+                  {isBranchRequired && effectiveBranchIds.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">운영팀 팀원은 담당 지점을 반드시 선택해야 합니다</p>
+                  )}
+                </>
               )}
             </div>
 

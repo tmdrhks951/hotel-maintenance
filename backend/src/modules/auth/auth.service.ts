@@ -67,6 +67,7 @@ export async function login(identifier: string, password: string) {
       department: true,
       status: true,
       branchId: true,
+      branchIds: true,
       isActive: true,
       passwordHash: true,
     },
@@ -102,6 +103,7 @@ export async function login(identifier: string, password: string) {
     role: user.role,
     position: user.position,
     branchId: user.branchId,
+    branchIds: user.branchIds,
   });
 
   const refreshToken = signRefreshToken(user.id);
@@ -150,6 +152,7 @@ export async function refresh(rawToken: string) {
           role: true,
           position: true,
           branchId: true,
+          branchIds: true,
           isActive: true,
           deletedAt: true,
           /// [AUTH STEP ADD START]
@@ -208,6 +211,7 @@ export async function refresh(rawToken: string) {
     role: stored.user.role,
     position: stored.user.position,
     branchId: stored.user.branchId,
+    branchIds: stored.user.branchIds,
   });
 
   const newRefreshToken = signRefreshToken(stored.user.id);
