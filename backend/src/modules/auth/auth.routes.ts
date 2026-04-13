@@ -11,6 +11,7 @@ import {
   requestPasswordResetHandler,
   getSecurityQuestionsHandler,
   checkLoginIdHandler,
+  publicBranchesHandler,
   /// [AUTH STEP ADD END]
 } from './auth.controller';
 
@@ -48,6 +49,9 @@ router.get('/security-questions', getSecurityQuestionsHandler);
 
 // GET /api/v1/auth/check-login-id?loginId=xxx — 아이디 중복 확인
 router.get('/check-login-id', checkLoginIdHandler);
+
+// GET /api/v1/auth/branches — 회원가입용 공개 지점 목록 (인증 불필요)
+router.get('/branches', publicBranchesHandler);
 
 /// [AUTH STEP ADD END]
 

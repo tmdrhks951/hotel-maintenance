@@ -173,4 +173,18 @@ export async function checkLoginIdHandler(req: Request, res: Response, next: Nex
   }
 }
 
+// ================================================================
+// 회원가입용 공개 지점 목록 (인증 불필요)
+// ================================================================
+
+export async function publicBranchesHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { listBranches } = await import('@/modules/branch/branch.service');
+    const branches = await listBranches({ isActive: true });
+    res.status(200).json({ success: true, data: branches });
+  } catch (err) {
+    next(err);
+  }
+}
+
 /// [AUTH STEP ADD END]
