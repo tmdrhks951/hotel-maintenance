@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api';
-import { useBranches } from '@/hooks/useBranches';
-import type { ApiResponse, Role, Position, Department } from '@/types';
+import { useQuery } from '@tanstack/react-query';
+import type { ApiResponse, Branch, Role, Position, Department } from '@/types';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -47,7 +47,14 @@ const SECURITY_QUESTIONS = [
 
 export default function SignupPage() {
   const router = useRouter();
-  const { data: branches } = useBranches(true);
+  // 인증 없이 공개 지점 목록 조회 (회원가입 전용)
+  const { data: branches } = useQuery({
+    queryKey: ['public-branches'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ApiResponse<Branch[]>>('/auth/branches');
+      return data.data;
+    },
+  });
 
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
