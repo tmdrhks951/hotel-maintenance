@@ -4,17 +4,26 @@ import { randomBytes } from 'crypto';
 import fs from 'fs';
 
 // ================================================================
-// 로컬 디스크 스토리지 (개발 환경)
+// 로컬 디스크 스토리지
 //
-// TODO: 운영 환경에서는 MinIO 스토리지로 교체
+// UPLOAD_DIR 환경변수로 저장 경로 지정 가능 (Railway Volume 등 영구 스토리지 마운트용)
+// - 환경변수 미설정 시: process.cwd()/uploads (개발 환경 기본값)
+// - Railway 등 컨테이너 환경: 영구 볼륨을 마운트한 경로 지정 필수
+//   (미지정 시 컨테이너 재배포마다 업로드 파일 소실)
 // ================================================================
 
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+export const UPLOAD_DIR =
+  process.env.UPLOAD_DIR && process.env.UPLOAD_DIR.trim().length > 0
+    ? process.env.UPLOAD_DIR
+    : path.join(process.cwd(), 'uploads');
 
 // 서버 시작 시 uploads 디렉토리 자동 생성
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+// 시작 로그: Railway 로그에서 실제 사용 중인 경로 확인용
+// eslint-disable-next-line no-console
+console.log(`[multer] UPLOAD_DIR = ${UPLOAD_DIR}`);
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),

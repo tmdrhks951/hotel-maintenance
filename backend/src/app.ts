@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import path from 'path';
 import { env } from '@/config/env';
+import { UPLOAD_DIR } from '@/config/multer';
 import routes from '@/routes/index';
 import { errorHandler } from '@/common/errors/errorHandler';
 import { notFoundHandler } from '@/common/middleware/notFound';
@@ -35,8 +35,8 @@ export function createApp(): express.Application {
 
   // 업로드 파일 정적 서빙
   // URL: GET /uploads/:filename
-  // TODO: 운영 환경에서는 MinIO presigned URL로 교체
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // 실제 디스크 경로는 UPLOAD_DIR 환경변수로 지정 (Railway Volume 등 영구 스토리지)
+  app.use('/uploads', express.static(UPLOAD_DIR));
 
   // API 라우터
   app.use('/api/v1', routes);
