@@ -199,6 +199,7 @@ export interface FacilityRequest {
   status: FacilityRequestStatus;
   branchId: string;
   locationId: string | null;
+  roomNumber: string | null;
   branch: { id: string; name: string; code: string };
   location: { id: string; name: string; code: string | null; type: LocationType } | null;
   createdAt: string;
@@ -234,6 +235,18 @@ export interface FacilityRequestDetail extends FacilityRequestCard {
   operationsConfirmedBy: { id: string; name: string } | null;
   // STEP 11
   reopenCount: number;
+  // STEP 12: QC 수령 시 입력받는 필드들
+  estimatedDuration: number | null;
+  maintenanceRequired: boolean | null;
+  // STEP 12: 팀장급 보고 체크
+  opsReported: boolean;
+  opsReportedAt: string | null;
+  opsReportedById: string | null;
+  opsReportedBy: { id: string; name: string } | null;
+  qcReported: boolean;
+  qcReportedAt: string | null;
+  qcReportedById: string | null;
+  qcReportedBy: { id: string; name: string } | null;
   media: Media[];
   statusLogs: StatusLog[];
 }
@@ -273,6 +286,9 @@ export interface OperationsCard extends FacilityRequestCard {
   qcVerifiedBy: { id: string; name: string } | null;
   operationsConfirmedAt: string | null;
   operationsConfirmedBy: { id: string; name: string } | null;
+  // STEP 12: 팀장급 보고 체크 상태
+  opsReported?: boolean;
+  qcReported?: boolean;
   _count?: { comments: number };
 }
 
@@ -325,6 +341,15 @@ export interface QcReviewBody {
   emergencyReason?: string;
   priority?: Priority;
   reason?: string;
+  /// STEP 12: RECEIVE 시 필수
+  qcVisitScheduledAt?: string;
+  estimatedDuration?: number;
+  maintenanceRequired?: boolean;
+}
+
+// STEP 12: 팀장급 보고 체크 body
+export interface ToggleReportBody {
+  reported: boolean;
 }
 
 // STEP 6: 담당자 후보

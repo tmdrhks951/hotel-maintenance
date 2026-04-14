@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { RequestCategory } from '@prisma/client';
 import { AppError } from '@/common/errors/AppError';
 import * as facilityRequestService from './facility-request.service';
-import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto, QcVerifyDto, OperationsConfirmDto, UpdateFacilityRequestDto, ReopenFacilityRequestDto } from './facility-request.dto';
+import type { QcReviewDto, UpdateScheduleDto, AssignWorkerDto, CompleteWorkDto, QcVerifyDto, OperationsConfirmDto, UpdateFacilityRequestDto, ReopenFacilityRequestDto, ToggleReportDto } from './facility-request.dto';
 
 // ================================================================
 // GET /api/v1/facility-requests/duplicate-check
@@ -110,20 +110,30 @@ export async function createFacilityRequestHandler(
       return;
     }
 
-    const { branchId, locationId, category, description } = req.body as {
+    const { branchId, locationId, roomNumber, category, description } = req.body as {
       branchId?: string;
       locationId?: string;
+      roomNumber?: string;
       category?: string;
       description?: string;
     };
 
-    if (!branchId || !category || !description) {
+    // STEP 12: 지점/객실/위치/작업내용 모두 필수
+    if (!branchId || !locationId || !roomNumber || !category || !description) {
       res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'branchId, category, description은 필수입니다',
+          message: '지점, 객실, 위치, 카테고리, 작업내용은 필수입니다',
         },
+      });
+      return;
+    }
+
+    if (roomNumber.trim().length === 0) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: '객실 정보를 입력해주세요' },
       });
       return;
     }
@@ -142,7 +152,7 @@ export async function createFacilityRequestHandler(
     if (description.trim().length === 0) {
       res.status(400).json({
         success: false,
-        error: { code: 'VALIDATION_ERROR', message: '설명을 입력해주세요' },
+        error: { code: 'VALIDATION_ERROR', message: '작업내용을 입력해주세요' },
       });
       return;
     }
@@ -154,7 +164,8 @@ export async function createFacilityRequestHandler(
       user.branchIds,
       {
         branchId,
-        locationId: locationId || undefined,
+        locationId,
+        roomNumber: roomNumber.trim(),
         category: category as RequestCategory,
         description: description.trim(),
       },
@@ -623,6 +634,86 @@ export async function reopenFacilityRequestHandler(
       req.params.id,
       user.id,
       user.role,
+      user.branchIds,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id/ops-report  (STEP 12 — 운영팀 팀장 보고 체크)
+// ================================================================
+
+export async function toggleOpsReportHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as ToggleReportDto;
+    if (typeof dto.reported !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'reported는 boolean 값이어야 합니다' },
+      });
+      return;
+    }
+
+    const result = await facilityRequestService.toggleOpsReport(
+      req.params.id,
+      user.id,
+      user.role,
+      user.position,
+      user.branchIds,
+      dto,
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
+// PATCH /api/v1/facility-requests/:id/qc-report  (STEP 12 — QC 팀장 보고 체크)
+// ================================================================
+
+export async function toggleQcReportHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const dto = req.body as ToggleReportDto;
+    if (typeof dto.reported !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'reported는 boolean 값이어야 합니다' },
+      });
+      return;
+    }
+
+    const result = await facilityRequestService.toggleQcReport(
+      req.params.id,
+      user.id,
+      user.role,
+      user.position,
       user.branchIds,
       dto,
     );

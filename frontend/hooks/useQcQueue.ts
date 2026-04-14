@@ -13,6 +13,7 @@ import type {
   QcVerifyBody,
   OperationsConfirmBody,
   ReopenBody,
+  ToggleReportBody,
   AssignableUser,
 } from '@/types';
 
@@ -355,6 +356,51 @@ export function useUpdateFacilityRequest() {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
       qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.invalidateQueries({ queryKey: ['facility-request', variables.id] });
+    },
+  });
+}
+
+// ================================================================
+// STEP 12: 운영팀 팀장 보고 체크
+// ================================================================
+
+export function useToggleOpsReport(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ToggleReportBody) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/ops-report`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.setQueryData(['facility-request', requestId], updated);
+    },
+  });
+}
+
+// ================================================================
+// STEP 12: QC 팀장 보고 체크
+// ================================================================
+
+export function useToggleQcReport(requestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ToggleReportBody) => {
+      const { data } = await apiClient.patch<ApiResponse<FacilityRequestDetail>>(
+        `/facility-requests/${requestId}/qc-report`,
+        body,
+      );
+      return data.data;
+    },
+    onSuccess: (updated) => {
+      qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      qc.invalidateQueries({ queryKey: ['qc-completed'] });
+      qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      qc.setQueryData(['facility-request', requestId], updated);
     },
   });
 }

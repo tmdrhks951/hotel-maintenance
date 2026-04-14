@@ -12,6 +12,7 @@ import type {
   QcVerifyDto,
   OperationsConfirmDto,
   ReopenFacilityRequestDto,
+  ToggleReportDto,
 } from './facility-request.dto';
 
 // ================================================================
@@ -123,6 +124,10 @@ const REQUEST_DETAIL_SELECT = {
   scheduleChangeCount: true,
   branchId: true,
   locationId: true,
+  roomNumber: true,
+  estimatedDuration: true,
+  maintenanceRequired: true,
+  createdById: true,
   assignedToId: true,
   completedAt: true,
   completedById: true,
@@ -130,6 +135,12 @@ const REQUEST_DETAIL_SELECT = {
   qcVerifiedAt: true,
   operationsConfirmedByUserId: true,
   operationsConfirmedAt: true,
+  opsReported: true,
+  opsReportedAt: true,
+  opsReportedById: true,
+  qcReported: true,
+  qcReportedAt: true,
+  qcReportedById: true,
   reopenCount: true,
   createdAt: true,
   updatedAt: true,
@@ -141,6 +152,8 @@ const REQUEST_DETAIL_SELECT = {
   completedBy: { select: { id: true, name: true } },
   qcVerifiedBy: { select: { id: true, name: true } },
   operationsConfirmedBy: { select: { id: true, name: true } },
+  opsReportedBy: { select: { id: true, name: true } },
+  qcReportedBy: { select: { id: true, name: true } },
   media: {
     select: { id: true, url: true, filename: true, phase: true, type: true },
     orderBy: { createdAt: 'asc' as const },
@@ -205,6 +218,14 @@ export async function createFacilityRequest(
 ) {
   assertBranchAccess(userRole, userPosition, userBranchIds, dto.branchId);
 
+  // STEP 12: 필수 필드 검증 — 지점/객실/위치/작업내용
+  if (!dto.locationId?.trim()) {
+    throw new AppError('위치를 선택해주세요', 400, true, 'LOCATION_REQUIRED');
+  }
+  if (!dto.roomNumber?.trim()) {
+    throw new AppError('객실 정보를 입력해주세요', 400, true, 'ROOM_REQUIRED');
+  }
+
   const branch = await prisma.branch.findFirst({
     where: { id: dto.branchId, deletedAt: null, isActive: true },
   });
@@ -212,21 +233,17 @@ export async function createFacilityRequest(
     throw new AppError('지점을 찾을 수 없습니다', 404, true, 'BRANCH_NOT_FOUND');
   }
 
-  let locationName: string | null = null;
-  if (dto.locationId) {
-    const location = await prisma.location.findFirst({
-      where: { id: dto.locationId, branchId: dto.branchId, deletedAt: null },
-    });
-    if (!location) {
-      throw new AppError('해당 지점의 위치를 찾을 수 없습니다', 404, true, 'LOCATION_NOT_FOUND');
-    }
-    locationName = location.name;
+  const location = await prisma.location.findFirst({
+    where: { id: dto.locationId, branchId: dto.branchId, deletedAt: null },
+  });
+  if (!location) {
+    throw new AppError('해당 지점의 위치를 찾을 수 없습니다', 404, true, 'LOCATION_NOT_FOUND');
   }
+  const locationName = location.name;
+  const roomNumber = dto.roomNumber.trim();
 
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
-  const title = locationName
-    ? `${categoryLabel} — ${locationName}`
-    : `${categoryLabel} 요청`;
+  const title = `${categoryLabel} — ${roomNumber} ${locationName}`;
 
   const result = await prisma.$transaction(async (tx) => {
     const request = await tx.facilityRequest.create({
@@ -236,7 +253,8 @@ export async function createFacilityRequest(
         category: dto.category,
         status: 'REQUESTED',
         branchId: dto.branchId,
-        locationId: dto.locationId ?? null,
+        locationId: dto.locationId,
+        roomNumber,
         createdById: userId,
       },
       select: {
@@ -247,6 +265,7 @@ export async function createFacilityRequest(
         status: true,
         branchId: true,
         locationId: true,
+        roomNumber: true,
         branch: { select: { id: true, name: true, code: true } },
         location: { select: { id: true, name: true, code: true, type: true } },
         createdAt: true,
@@ -338,6 +357,11 @@ export async function getQcQueue(
     scheduleChangeCount: true,
     createdAt: true,
     updatedAt: true,
+    /// STEP 12: 객실 번호
+    roomNumber: true,
+    /// STEP 12: 보고 체크
+    opsReported: true,
+    qcReported: true,
     branch: { select: { id: true, name: true, code: true } },
     location: { select: { id: true, name: true, code: true } },
     createdBy: { select: { id: true, name: true } },
@@ -434,6 +458,24 @@ export async function qcReview(
     throw new AppError('긴급 사유를 입력해주세요', 400, true, 'EMERGENCY_REASON_REQUIRED');
   }
 
+  // STEP 12: RECEIVE 액션 시 방문일시/예상시간/정비여부 필수
+  let qcVisitDate: Date | null = null;
+  if (dto.action === 'RECEIVE') {
+    if (!dto.qcVisitScheduledAt) {
+      throw new AppError('QC 방문 예정일시를 입력해주세요', 400, true, 'QC_VISIT_DATE_REQUIRED');
+    }
+    qcVisitDate = new Date(dto.qcVisitScheduledAt);
+    if (isNaN(qcVisitDate.getTime())) {
+      throw new AppError('올바른 방문 예정일시를 입력해주세요', 400, true, 'INVALID_DATE');
+    }
+    if (dto.estimatedDuration == null || dto.estimatedDuration <= 0) {
+      throw new AppError('예상 소요시간을 입력해주세요', 400, true, 'ESTIMATED_DURATION_REQUIRED');
+    }
+    if (dto.maintenanceRequired == null) {
+      throw new AppError('정비 필요 여부를 선택해주세요', 400, true, 'MAINTENANCE_REQUIRED_MISSING');
+    }
+  }
+
   // 상태 전이 결정
   let newStatus: string | undefined;
   if (dto.action === 'MARK_REVIEW') newStatus = 'REVIEW_REQUIRED';
@@ -466,6 +508,13 @@ export async function qcReview(
 
   if (newStatus) {
     updateData.status = newStatus;
+  }
+
+  // STEP 12: RECEIVE 시 QC 방문일시/예상시간/정비여부 저장
+  if (dto.action === 'RECEIVE') {
+    updateData.plannedWorkDate = qcVisitDate;
+    updateData.estimatedDuration = dto.estimatedDuration;
+    updateData.maintenanceRequired = dto.maintenanceRequired;
   }
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -826,6 +875,11 @@ export async function getQcCompleted(
     completedAt: true,
     createdAt: true,
     updatedAt: true,
+    /// STEP 12: 객실 번호
+    roomNumber: true,
+    /// STEP 12: 보고 체크
+    opsReported: true,
+    qcReported: true,
     branch: { select: { id: true, name: true, code: true } },
     location: { select: { id: true, name: true, code: true } },
     createdBy: { select: { id: true, name: true } },
@@ -981,6 +1035,11 @@ export async function getOperationsPending(
     operationsConfirmedAt: true,
     createdAt: true,
     updatedAt: true,
+    /// STEP 12: 객실 번호
+    roomNumber: true,
+    /// STEP 12: 보고 체크
+    opsReported: true,
+    qcReported: true,
     branch: { select: { id: true, name: true, code: true } },
     location: { select: { id: true, name: true, code: true } },
     createdBy: { select: { id: true, name: true } },
@@ -1176,6 +1235,11 @@ export async function getOperationsDashboard(
     operationsConfirmedAt: true,
     createdAt: true,
     updatedAt: true,
+    /// STEP 12: 객실 번호
+    roomNumber: true,
+    /// STEP 12: 보고 체크
+    opsReported: true,
+    qcReported: true,
     branch:                { select: { id: true, name: true, code: true } },
     location:              { select: { id: true, name: true, code: true } },
     createdBy:             { select: { id: true, name: true } },
@@ -1507,6 +1571,98 @@ export async function reopenFacilityRequest(
       });
     })
     .catch(() => {});
+
+  return updated;
+}
+
+// ================================================================
+// STEP 12: 팀장급 보고 체크 — 운영팀 팀장/QC 팀장이 각자 담당 지점의 요청에 대해
+//                         상부 보고 완료 여부를 체크할 수 있음
+// ================================================================
+
+/** 팀장급 권한 확인 — TEAM_LEADER 또는 DEPUTY_LEADER */
+function assertLeaderRole(role: string, position: string): void {
+  if (role === 'ADMIN') return;
+  if ((role === 'OPERATIONS' || role === 'QC') &&
+      (position === 'TEAM_LEADER' || position === 'DEPUTY_LEADER')) return;
+  throw new AppError(
+    '팀장급만 보고 체크가 가능합니다',
+    403,
+    true,
+    'LEADER_ONLY',
+  );
+}
+
+export async function toggleOpsReport(
+  requestId: string,
+  userId: string,
+  role: string,
+  position: string,
+  userBranchIds: string[],
+  dto: ToggleReportDto,
+) {
+  assertLeaderRole(role, position);
+
+  // 운영팀 팀장 또는 ADMIN만 운영팀 보고 체크 가능
+  if (role !== 'OPERATIONS' && role !== 'ADMIN') {
+    throw new AppError('운영팀 팀장만 체크 가능합니다', 403, true, 'FORBIDDEN');
+  }
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, branchId: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
+
+  const updated = await prisma.facilityRequest.update({
+    where: { id: requestId },
+    data: dto.reported
+      ? { opsReported: true, opsReportedAt: new Date(), opsReportedById: userId }
+      : { opsReported: false, opsReportedAt: null, opsReportedById: null },
+    select: REQUEST_DETAIL_SELECT,
+  });
+
+  return updated;
+}
+
+export async function toggleQcReport(
+  requestId: string,
+  userId: string,
+  role: string,
+  position: string,
+  userBranchIds: string[],
+  dto: ToggleReportDto,
+) {
+  assertLeaderRole(role, position);
+
+  // QC 팀장 또는 ADMIN만 QC 보고 체크 가능
+  if (role !== 'QC' && role !== 'ADMIN') {
+    throw new AppError('QC 팀장만 체크 가능합니다', 403, true, 'FORBIDDEN');
+  }
+
+  const request = await prisma.facilityRequest.findFirst({
+    where: { id: requestId, deletedAt: null },
+    select: { id: true, branchId: true },
+  });
+
+  if (!request) {
+    throw new AppError('요청을 찾을 수 없습니다', 404, true, 'REQUEST_NOT_FOUND');
+  }
+
+  assertQcBranchAccess(role, userBranchIds, request.branchId);
+
+  const updated = await prisma.facilityRequest.update({
+    where: { id: requestId },
+    data: dto.reported
+      ? { qcReported: true, qcReportedAt: new Date(), qcReportedById: userId }
+      : { qcReported: false, qcReportedAt: null, qcReportedById: null },
+    select: REQUEST_DETAIL_SELECT,
+  });
 
   return updated;
 }

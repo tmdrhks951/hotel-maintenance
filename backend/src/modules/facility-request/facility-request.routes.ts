@@ -23,6 +23,8 @@ import {
   reopenFacilityRequestHandler,
   getOperationsDashboardHandler,
   getWorkHistoryHandler,
+  toggleOpsReportHandler,
+  toggleQcReportHandler,
 } from './facility-request.controller';
 import {
   getCommentsHandler,
@@ -98,6 +100,12 @@ router.patch('/:id/operations-confirm', authorize(Role.OPERATIONS, Role.ADMIN), 
 
 // PATCH /facility-requests/:id/reopen  (STEP 11 — QC/OPERATIONS/ADMIN)
 router.patch('/:id/reopen', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN), reopenFacilityRequestHandler);
+
+// PATCH /facility-requests/:id/ops-report  (STEP 12 — 운영팀 팀장 보고 체크)
+router.patch('/:id/ops-report', authorize(Role.OPERATIONS, Role.ADMIN), toggleOpsReportHandler);
+
+// PATCH /facility-requests/:id/qc-report  (STEP 12 — QC 팀장 보고 체크)
+router.patch('/:id/qc-report', authorize(Role.QC, Role.ADMIN), toggleQcReportHandler);
 
 // POST /facility-requests/:id/complete  (STEP 7 — QC/ADMIN, multipart/form-data)
 router.post(

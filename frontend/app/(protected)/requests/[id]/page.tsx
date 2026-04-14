@@ -10,6 +10,7 @@ import PhotoGallery from '@/components/request/PhotoGallery';
 import CommentSection from '@/components/request/CommentSection';
 import ActionButtons from '@/components/request/ActionButtons';
 import StatusTimeline from '@/components/request/StatusTimeline';
+import ReportCheckCard from '@/components/request/ReportCheckCard';
 import {
   REQUEST_CATEGORY_LABEL,
   LOCATION_TYPE_LABEL,
@@ -148,6 +149,9 @@ export default function RequestDetailPage() {
       {/* Action buttons */}
       <ActionButtons request={request} onRefresh={() => refetch()} />
 
+      {/* STEP 12: 팀장급 보고 체크 카드 */}
+      <ReportCheckCard request={request} onRefresh={() => refetch()} />
+
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: Photo gallery + Comments */}
@@ -177,6 +181,10 @@ export default function RequestDetailPage() {
               />
               <InfoRow label="지점" value={request.branch?.name ?? '-'} />
               <InfoRow
+                label="객실"
+                value={request.roomNumber ?? <span className="text-gray-400">-</span>}
+              />
+              <InfoRow
                 label="위치"
                 value={
                   request.location
@@ -185,6 +193,27 @@ export default function RequestDetailPage() {
                 }
               />
               <InfoRow label="우선순위" value={<PriorityBadge priority={request.priority} />} />
+
+              {/* STEP 12: QC 수령 시 입력받은 정보 */}
+              {request.estimatedDuration != null && (
+                <InfoRow label="예상 소요" value={`${request.estimatedDuration}분`} />
+              )}
+              {request.maintenanceRequired != null && (
+                <InfoRow
+                  label="정비 필요"
+                  value={
+                    request.maintenanceRequired ? (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-orange-100 text-orange-700">
+                        필요
+                      </span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                        불필요
+                      </span>
+                    )
+                  }
+                />
+              )}
 
               {/* Emergency info */}
               {request.isEmergency && (

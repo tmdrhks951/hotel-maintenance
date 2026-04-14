@@ -158,6 +158,10 @@ model User {
   qcVerifiedRequests          FacilityRequest[]  @relation("RequestQcVerifiedBy")
   /// STEP 8: 운영팀 확인 처리자
   operationsConfirmedRequests FacilityRequest[]  @relation("RequestOperationsConfirmedBy")
+  /// STEP 12: 운영팀 팀장 보고 체크 처리자
+  opsReportedRequests         FacilityRequest[]  @relation("RequestOpsReportedBy")
+  /// STEP 12: QC 팀장 보고 체크 처리자
+  qcReportedRequests          FacilityRequest[]  @relation("RequestQcReportedBy")
   /// STEP 6: 상태 변경 이력
   statusLogs        StatusLog[]
   comments          Comment[]
@@ -275,6 +279,27 @@ model FacilityRequest {
 
   locationId String?
   location   Location? @relation(fields: [locationId], references: [id])
+
+  /// STEP 12: 객실 번호 (운영팀 등록 시 필수)
+  roomNumber String?
+
+  /// STEP 12: QC 수령 시 입력받는 예상 소요시간 (분 단위)
+  estimatedDuration Int?
+
+  /// STEP 12: QC 수령 시 입력받는 정비 필요 여부
+  maintenanceRequired Boolean?
+
+  /// STEP 12: 운영팀 팀장(TEAM_LEADER/DEPUTY_LEADER) 보고 체크
+  opsReported     Boolean   @default(false)
+  opsReportedAt   DateTime?
+  opsReportedById String?
+  opsReportedBy   User?     @relation("RequestOpsReportedBy", fields: [opsReportedById], references: [id])
+
+  /// STEP 12: QC 팀장(TEAM_LEADER/DEPUTY_LEADER) 보고 체크
+  qcReported     Boolean   @default(false)
+  qcReportedAt   DateTime?
+  qcReportedById String?
+  qcReportedBy   User?     @relation("RequestQcReportedBy", fields: [qcReportedById], references: [id])
 
   createdById String
   createdBy   User   @relation("RequestCreatedBy", fields: [createdById], references: [id])

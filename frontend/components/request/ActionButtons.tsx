@@ -91,6 +91,13 @@ export default function ActionButtons({ request, onRefresh }: Props) {
   const [completionNote, setCompletionNote] = useState('');
   const [afterPhoto, setAfterPhoto] = useState<File | null>(null);
 
+  // STEP 12: QC RECEIVE form states
+  const [showReceiveForm, setShowReceiveForm] = useState(false);
+  const [qcVisitDate, setQcVisitDate] = useState('');
+  const [estimatedDuration, setEstimatedDuration] = useState<string>('');
+  const [maintenanceRequired, setMaintenanceRequired] = useState<boolean | null>(null);
+  const [receiveError, setReceiveError] = useState('');
+
   // Available work items based on selected action + request category
   const availableItems = useMemo(() => {
     if (!workAction) return [];
@@ -109,7 +116,7 @@ export default function ActionButtons({ request, onRefresh }: Props) {
   // ================================================================
 
   function handleSimpleQcAction(
-    action: 'RECEIVE' | 'MARK_REVIEW' | 'START_WORK' | 'CANCEL' | 'REVERT_TO_REQUESTED',
+    action: 'MARK_REVIEW' | 'START_WORK' | 'CANCEL' | 'REVERT_TO_REQUESTED',
     title: string,
     message: string,
   ) {
@@ -128,6 +135,55 @@ export default function ActionButtons({ request, onRefresh }: Props) {
         );
       },
     });
+  }
+
+  // STEP 12: QC 수령 — 방문일시/소요시간/정비필요 여부 필수 입력
+  function openReceiveForm() {
+    setQcVisitDate('');
+    setEstimatedDuration('');
+    setMaintenanceRequired(null);
+    setReceiveError('');
+    setShowReceiveForm(true);
+  }
+
+  function handleReceiveSubmit() {
+    setReceiveError('');
+
+    if (!qcVisitDate) {
+      setReceiveError('QC 방문 예정일시를 입력해주세요');
+      return;
+    }
+    const durationNum = parseInt(estimatedDuration, 10);
+    if (!estimatedDuration || isNaN(durationNum) || durationNum <= 0) {
+      setReceiveError('예상 소요시간(분)을 입력해주세요');
+      return;
+    }
+    if (maintenanceRequired === null) {
+      setReceiveError('정비 필요 여부를 선택해주세요');
+      return;
+    }
+
+    // datetime-local -> ISO string
+    const isoDate = new Date(qcVisitDate).toISOString();
+
+    qcReview.mutate(
+      {
+        action: 'RECEIVE',
+        qcVisitScheduledAt: isoDate,
+        estimatedDuration: durationNum,
+        maintenanceRequired,
+      },
+      {
+        onSuccess: () => {
+          setShowReceiveForm(false);
+          onRefresh();
+        },
+        onError: (e: unknown) => {
+          const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+          setReceiveError(msg ?? '수령 처리에 실패했습니다');
+        },
+      },
+    );
   }
 
   function handleVerify() {
@@ -251,7 +307,7 @@ export default function ActionButtons({ request, onRefresh }: Props) {
         type="button"
         disabled={isPending}
         className={BTN.primary}
-        onClick={() => handleSimpleQcAction('RECEIVE', '수령 확인', '이 요청을 수령하시겠습니까?')}
+        onClick={openReceiveForm}
       >
         수령
       </button>,
@@ -274,7 +330,7 @@ export default function ActionButtons({ request, onRefresh }: Props) {
         type="button"
         disabled={isPending}
         className={BTN.primary}
-        onClick={() => handleSimpleQcAction('RECEIVE', '수령 확인', '이 요청을 수령하시겠습니까?')}
+        onClick={openReceiveForm}
       >
         수령
       </button>,
@@ -585,6 +641,99 @@ export default function ActionButtons({ request, onRefresh }: Props) {
               onClick={handleCompleteSubmit}
             >
               {completeWork.isPending ? '등록 중...' : '작업 완료 등록'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* STEP 12: QC 수령 폼 모달 */}
+      <Modal
+        open={showReceiveForm}
+        onClose={() => setShowReceiveForm(false)}
+        title="QC 수령"
+      >
+        <div className="space-y-4">
+          {receiveError && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {receiveError}
+            </div>
+          )}
+
+          {/* QC 방문 예정일시 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              QC 방문 예정일시 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="datetime-local"
+              value={qcVisitDate}
+              onChange={(e) => setQcVisitDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none"
+            />
+          </div>
+
+          {/* 예상 소요시간 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              예상 소요시간 (분) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={estimatedDuration}
+              onChange={(e) => setEstimatedDuration(e.target.value)}
+              placeholder="예: 30"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none"
+            />
+          </div>
+
+          {/* 정비 필요 여부 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              정비 필요 여부 <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMaintenanceRequired(true)}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                  maintenanceRequired === true
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                정비 필요
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaintenanceRequired(false)}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                  maintenanceRequired === false
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                정비 불필요
+              </button>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              className={BTN.secondary}
+              onClick={() => setShowReceiveForm(false)}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              className={BTN.primary}
+              disabled={qcReview.isPending}
+              onClick={handleReceiveSubmit}
+            >
+              {qcReview.isPending ? '처리 중...' : '수령 확인'}
             </button>
           </div>
         </div>

@@ -6,7 +6,10 @@ import { RequestCategory, Priority } from '@prisma/client';
 
 export interface CreateFacilityRequestDto {
   branchId: string;
-  locationId?: string;
+  /// STEP 12: 위치(Location) — 필수
+  locationId: string;
+  /// STEP 12: 객실 번호 (예: "205호") — 필수
+  roomNumber: string;
   category: RequestCategory;
   /// 한 줄 설명 — 운영팀 입력 최소화 원칙
   description: string;
@@ -44,6 +47,21 @@ export interface QcReviewDto {
   priority?: Priority;
   /// StatusLog reason 필드
   reason?: string;
+  /// STEP 12: RECEIVE 액션 시 필수 — QC 방문 예정일시 (ISO 8601)
+  qcVisitScheduledAt?: string;
+  /// STEP 12: RECEIVE 액션 시 필수 — 예상 소요시간 (분 단위)
+  estimatedDuration?: number;
+  /// STEP 12: RECEIVE 액션 시 필수 — 정비 필요 여부
+  maintenanceRequired?: boolean;
+}
+
+// ================================================================
+// STEP 12 DTOs — 팀장 보고 체크
+// ================================================================
+
+export interface ToggleReportDto {
+  /// true: 보고 완료, false: 보고 미완료
+  reported: boolean;
 }
 
 // ================================================================

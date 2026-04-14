@@ -52,6 +52,7 @@ export default function NewFacilityRequestPage() {
 
   // Form state
   const [branchId, setBranchId] = useState<string>('');
+  const [roomNumber, setRoomNumber] = useState<string>('');
   const [locationId, setLocationId] = useState<string>('');
   const [category, setCategory] = useState<RequestCategory>('PLUMBING');
   const [title, setTitle] = useState<string>('');
@@ -99,9 +100,12 @@ export default function NewFacilityRequestPage() {
     if (!titleEdited) {
       const catLabel = REQUEST_CATEGORY_LABEL[category] ?? '';
       const locName = selectedLocation?.name ?? '';
-      setTitle(`${catLabel} ${locName}`.trim());
+      const room = roomNumber.trim();
+      // STEP 12: 객실 번호 포함 형식 — "{카테고리} — {객실} {위치}"
+      const parts = [catLabel, room && locName ? `— ${room} ${locName}` : room ? `— ${room}` : locName ? `— ${locName}` : ''];
+      setTitle(parts.filter(Boolean).join(' ').trim());
     }
-  }, [category, selectedLocation, titleEdited]);
+  }, [category, selectedLocation, titleEdited, roomNumber]);
 
   // ----------------------------------------------------------------
   // Duplicate check when branchId + locationId are both set
@@ -153,7 +157,10 @@ export default function NewFacilityRequestPage() {
     setError('');
 
     if (!branchId) { setError('지점을 선택해주세요'); return; }
+    if (!roomNumber.trim()) { setError('객실 정보를 입력해주세요'); return; }
+    if (!locationId) { setError('위치를 선택해주세요'); return; }
     if (!category) { setError('카테고리를 선택해주세요'); return; }
+    if (!description.trim()) { setError('작업 내용을 입력해주세요'); return; }
     if (!title.trim()) { setError('제목을 입력해주세요'); return; }
 
     const fd = new FormData();
@@ -161,7 +168,8 @@ export default function NewFacilityRequestPage() {
     fd.append('description', description.trim());
     fd.append('category', category);
     fd.append('branchId', branchId);
-    if (locationId) fd.append('locationId', locationId);
+    fd.append('roomNumber', roomNumber.trim());
+    fd.append('locationId', locationId);
     if (photo) fd.append('image', photo);
 
     try {
@@ -250,10 +258,24 @@ export default function NewFacilityRequestPage() {
             )}
           </div>
 
-          {/* 2. 위치 선택 */}
+          {/* 2. 객실 번호 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              위치 선택 <span className="text-xs text-gray-400 font-normal">(선택)</span>
+              객실 <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={roomNumber}
+              onChange={(e) => setRoomNumber(e.target.value)}
+              placeholder="예: 205호"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {/* 3. 위치 선택 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              위치 선택 <span className="text-red-500">*</span>
             </label>
             <select
               value={locationId}
@@ -331,13 +353,15 @@ export default function NewFacilityRequestPage() {
             )}
           </div>
 
-          {/* 5. 설명 */}
+          {/* 5. 작업 내용 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              작업 내용 <span className="text-red-500">*</span>
+            </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="상세 내용을 입력해주세요"
+              placeholder="어떤 작업이 필요한지 상세히 입력해주세요"
               rows={4}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
