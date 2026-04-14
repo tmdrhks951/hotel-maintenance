@@ -129,10 +129,27 @@ export async function getQcUserIds(branchId: string): Promise<string[]> {
 // ================================================================
 
 export async function getNotifications(userId: string, unreadOnly: boolean) {
+  /// [PATCH] 본인 지점 알림만 노출 — branchIds 기반 재필터 (fan-out/응답 구조 불변)
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { branchIds: true },
+  });
+  const myBranchIds = user?.branchIds ?? [];
+  const branchFilter =
+    myBranchIds.length > 0
+      ? {
+          OR: [
+            { requestId: null }, // 요청과 무관한 시스템 알림은 통과
+            { request: { branchId: { in: myBranchIds } } },
+          ],
+        }
+      : {};
+
   return prisma.notification.findMany({
     where: {
       userId,
       ...(unreadOnly ? { isRead: false } : {}),
+      ...branchFilter,
     },
     select: {
       id: true,

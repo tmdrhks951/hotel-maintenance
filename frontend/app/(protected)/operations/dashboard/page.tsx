@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOperationsDashboard } from '@/hooks/useQcQueue';
+import { useAuthStore } from '@/stores/authStore';
 import BranchFilter from '@/components/ui/BranchFilter';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityBadge from '@/components/ui/PriorityBadge';
@@ -25,13 +26,18 @@ function formatDate(dateStr: string | null): string {
 // 대시보드 카드
 // ================================================================
 
-function DashboardCard({ card }: { card: OperationsCard }) {
+function DashboardCard({ card, isMine }: { card: OperationsCard; isMine: boolean }) {
   const router = useRouter();
+
+  /// [PATCH] 본인 지점 카드는 하늘색 배경 + 좌측 굵은 파란 테두리로 시각적 구분
+  const containerCls = isMine
+    ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-2'
+    : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2';
 
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2"
+      className={containerCls}
     >
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{card.title}</h4>
@@ -105,39 +111,57 @@ export default function OperationsDashboardPage() {
   const [branchId, setBranchId] = useState<string | null>(null);
   const { data, isLoading } = useOperationsDashboard(branchId ?? undefined);
 
+  /// [PATCH] 본인 지점 Set — branchIds 우선, 없으면 단일 branchId fallback
+  const user = useAuthStore((s) => s.user);
+  const myBranchIds = useMemo(() => {
+    if (!user) return new Set<string>();
+    if (user.branchIds && user.branchIds.length > 0) return new Set(user.branchIds);
+    if (user.branchId) return new Set([user.branchId]);
+    return new Set<string>();
+  }, [user]);
+
+  /// [PATCH] 본인 지점 우선 정렬 (stable — 원본 인덱스 유지)
+  const sortMineFirst = (items: OperationsCard[]): OperationsCard[] => {
+    if (myBranchIds.size === 0) return items;
+    return items
+      .map((item, idx) => ({ item, idx, mine: myBranchIds.has(item.branch.id) ? 0 : 1 }))
+      .sort((a, b) => a.mine - b.mine || a.idx - b.idx)
+      .map((x) => x.item);
+  };
+
   const sections = [
     {
       key: 'newRequests',
       title: '신규 요청',
-      items: data?.newRequests ?? [],
+      items: sortMineFirst(data?.newRequests ?? []),
       headerColor: 'bg-red-500',
       badgeColor: 'bg-red-100 text-red-700',
     },
     {
       key: 'requested',
       title: '수령 완료',
-      items: data?.requested ?? [],
+      items: sortMineFirst(data?.requested ?? []),
       headerColor: 'bg-blue-500',
       badgeColor: 'bg-blue-100 text-blue-700',
     },
     {
       key: 'scheduled',
       title: '예정',
-      items: data?.scheduled ?? [],
+      items: sortMineFirst(data?.scheduled ?? []),
       headerColor: 'bg-indigo-500',
       badgeColor: 'bg-indigo-100 text-indigo-700',
     },
     {
       key: 'today',
       title: '오늘 작업',
-      items: data?.today ?? [],
+      items: sortMineFirst(data?.today ?? []),
       headerColor: 'bg-purple-500',
       badgeColor: 'bg-purple-100 text-purple-700',
     },
     {
       key: 'completed',
       title: '완료',
-      items: data?.completed ?? [],
+      items: sortMineFirst(data?.completed ?? []),
       headerColor: 'bg-green-500',
       badgeColor: 'bg-green-100 text-green-700',
     },
@@ -168,7 +192,7 @@ export default function OperationsDashboardPage() {
                 badgeColor={s.badgeColor}
               >
                 {s.items.map((c) => (
-                  <DashboardCard key={c.id} card={c} />
+                  <DashboardCard key={c.id} card={c} isMine={myBranchIds.has(c.branch.id)} />
                 ))}
               </Section>
             ))}
@@ -185,7 +209,7 @@ export default function OperationsDashboardPage() {
                 badgeColor={s.badgeColor}
               >
                 {s.items.map((c) => (
-                  <DashboardCard key={c.id} card={c} />
+                  <DashboardCard key={c.id} card={c} isMine={myBranchIds.has(c.branch.id)} />
                 ))}
               </Section>
             ))}

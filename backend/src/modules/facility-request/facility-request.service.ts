@@ -1220,9 +1220,10 @@ export async function getOperationsDashboard(
 ) {
   assertOperationsAccess(role);
 
-  const branchWhere = (role === 'OPERATIONS' && userBranchIds.length > 0)
-    ? { branchId: { in: userBranchIds } }
-    : filterBranchId
+  /// [PATCH] 운영팀 대시보드는 전체 지점을 기본 노출. 본인 지점 우선 배치는 프론트에서 처리.
+  /// [PATCH] 기존 userBranchIds 자동 스코프는 제거 — filterBranchId로만 수동 좁히기.
+  void userBranchIds;
+  const branchWhere = filterBranchId
     ? { branchId: filterBranchId }
     : {};
 
