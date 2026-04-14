@@ -8,6 +8,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityBadge from '@/components/ui/PriorityBadge';
 import { REQUEST_CATEGORY_LABEL } from '@/types';
 import type { FacilityRequestCard } from '@/types';
+import { groupByDateThenBranch } from '@/lib/groupCards';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -33,20 +34,29 @@ function RequestCard({ card, onQuickAction }: {
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2"
+      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5"
     >
-      {/* 상단: 제목 + 뱃지 */}
+      {/* 1순위 메인: 지점 + 객실 + (우선순위 뱃지) */}
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{card.title}</h4>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold text-gray-900 truncate">
+            {card.branch.name}
+            {card.roomNumber && <span className="ml-1.5">{card.roomNumber}</span>}
+          </div>
+          {/* 2순위 메인: 위치 */}
+          {card.location && (
+            <div className="text-sm text-gray-700 truncate mt-0.5">{card.location.name}</div>
+          )}
+        </div>
         <PriorityBadge priority={card.priority} isEmergency={card.isEmergency} />
       </div>
 
-      {/* 지점 + 카테고리 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-gray-500">{card.branch.name}</span>
-        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+      {/* 3순위 보조: 카테고리 + 작업내용(title) + 상태 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[card.category]}
         </span>
+        <span className="text-xs text-gray-500 truncate flex-1 min-w-0">{card.title}</span>
         <StatusBadge status={card.status} />
       </div>
 
@@ -71,6 +81,42 @@ function RequestCard({ card, onQuickAction }: {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ================================================================
+// [PATCH] 칸반 컬럼 내부 날짜→지점 그룹 렌더
+// ================================================================
+
+function GroupedQueueCards({
+  items,
+  render,
+  getDate,
+}: {
+  items: FacilityRequestCard[];
+  render: (c: FacilityRequestCard) => React.ReactNode;
+  getDate: (c: FacilityRequestCard) => string | null;
+}) {
+  const groups = groupByDateThenBranch(items, getDate);
+  if (groups.length === 0) {
+    return <p className="text-xs text-gray-400 text-center py-8">대기 중인 요청 없음</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {groups.map((g) => (
+        <div key={g.dateKey} className="space-y-1.5">
+          <div className="text-xs font-semibold text-gray-500 border-b border-gray-100 pb-1">
+            {g.dateLabel}
+          </div>
+          {g.branches.map((b) => (
+            <div key={b.branchId} className="space-y-2">
+              <div className="text-[11px] font-medium text-gray-400 pl-1">{b.branchName}</div>
+              {b.items.map((c) => render(c))}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -139,26 +185,50 @@ export default function QcQueuePage() {
           {/* 모바일: 탭형 */}
           <div className="lg:hidden space-y-6">
             <KanbanColumn title="신규 요청" count={data?.newRequests.length ?? 0} color="bg-blue-100 text-blue-700">
-              {data?.newRequests.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.newRequests ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.createdAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
             <KanbanColumn title="검토 필요" count={data?.reviewRequired.length ?? 0} color="bg-yellow-100 text-yellow-700">
-              {data?.reviewRequired.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.reviewRequired ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.updatedAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
             <KanbanColumn title="작업 중" count={data?.inProgress.length ?? 0} color="bg-purple-100 text-purple-700">
-              {data?.inProgress.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.inProgress ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.updatedAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
           </div>
 
           {/* 데스크탑: 3열 칸반 */}
           <div className="hidden lg:grid lg:grid-cols-3 gap-5">
             <KanbanColumn title="신규 요청" count={data?.newRequests.length ?? 0} color="bg-blue-100 text-blue-700">
-              {data?.newRequests.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.newRequests ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.createdAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
             <KanbanColumn title="검토 필요" count={data?.reviewRequired.length ?? 0} color="bg-yellow-100 text-yellow-700">
-              {data?.reviewRequired.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.reviewRequired ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.updatedAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
             <KanbanColumn title="작업 중" count={data?.inProgress.length ?? 0} color="bg-purple-100 text-purple-700">
-              {data?.inProgress.map((c) => <QuickActionCard key={c.id} card={c} />)}
+              <GroupedQueueCards
+                items={data?.inProgress ?? []}
+                getDate={(c) => c.plannedWorkDate ?? c.updatedAt}
+                render={(c) => <QuickActionCard key={c.id} card={c} />}
+              />
             </KanbanColumn>
           </div>
         </>

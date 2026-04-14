@@ -9,6 +9,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityBadge from '@/components/ui/PriorityBadge';
 import { REQUEST_CATEGORY_LABEL } from '@/types';
 import type { OperationsCard } from '@/types';
+import { groupByDateThenBranch } from '@/lib/groupCards';
 
 // ================================================================
 // 유틸
@@ -31,24 +32,35 @@ function DashboardCard({ card, isMine }: { card: OperationsCard; isMine: boolean
 
   /// [PATCH] 본인 지점 카드는 하늘색 배경 + 좌측 굵은 파란 테두리로 시각적 구분
   const containerCls = isMine
-    ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-2'
-    : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2';
+    ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-1.5'
+    : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5';
 
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
       className={containerCls}
     >
+      {/* 1순위 메인: 지점 + 객실 */}
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{card.title}</h4>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold text-gray-900 truncate">
+            {card.branch.name}
+            {card.roomNumber && <span className="ml-1.5">{card.roomNumber}</span>}
+          </div>
+          {/* 2순위 메인: 위치 */}
+          {card.location && (
+            <div className="text-sm text-gray-700 truncate mt-0.5">{card.location.name}</div>
+          )}
+        </div>
         <PriorityBadge priority={card.priority} isEmergency={card.isEmergency} />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-gray-500">{card.branch.name}</span>
-        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+      {/* 3순위 보조: 카테고리 + 작업내용(title) + 상태 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[card.category]}
         </span>
+        <span className="text-xs text-gray-500 truncate flex-1 min-w-0">{card.title}</span>
         <StatusBadge status={card.status} />
       </div>
 
@@ -66,6 +78,52 @@ function DashboardCard({ card, isMine }: { card: OperationsCard; isMine: boolean
           <span>{formatDate(card.plannedWorkDate)}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ================================================================
+// [PATCH] 섹션 내부 날짜 → 지점 그룹 (본인 지점 우선 정렬)
+// ================================================================
+
+function SectionGroupedCards({
+  items,
+  myBranchIds,
+}: {
+  items: OperationsCard[];
+  myBranchIds: Set<string>;
+}) {
+  const groups = groupByDateThenBranch(
+    items,
+    (c) => c.plannedWorkDate ?? c.createdAt,
+    { mineBranchIds: myBranchIds },
+  );
+  if (groups.length === 0) {
+    return <p className="text-xs text-gray-400 text-center py-8">데이터가 없습니다</p>;
+  }
+  return (
+    <div className="space-y-3">
+      {groups.map((g) => (
+        <div key={g.dateKey} className="space-y-1.5">
+          <div className="text-xs font-semibold text-gray-500 border-b border-gray-100 pb-1">
+            {g.dateLabel}
+          </div>
+          {g.branches.map((b) => (
+            <div key={b.branchId} className="space-y-2">
+              <div
+                className={`text-[11px] font-medium pl-1 ${
+                  myBranchIds.has(b.branchId) ? 'text-blue-600' : 'text-gray-400'
+                }`}
+              >
+                {b.branchName}
+              </div>
+              {b.items.map((c) => (
+                <DashboardCard key={c.id} card={c} isMine={myBranchIds.has(c.branch.id)} />
+              ))}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -120,48 +178,40 @@ export default function OperationsDashboardPage() {
     return new Set<string>();
   }, [user]);
 
-  /// [PATCH] 본인 지점 우선 정렬 (stable — 원본 인덱스 유지)
-  const sortMineFirst = (items: OperationsCard[]): OperationsCard[] => {
-    if (myBranchIds.size === 0) return items;
-    return items
-      .map((item, idx) => ({ item, idx, mine: myBranchIds.has(item.branch.id) ? 0 : 1 }))
-      .sort((a, b) => a.mine - b.mine || a.idx - b.idx)
-      .map((x) => x.item);
-  };
-
+  /// [PATCH] 본인 지점 우선 정렬은 groupByDateThenBranch의 mineBranchIds 옵션으로 이관
   const sections = [
     {
       key: 'newRequests',
       title: '신규 요청',
-      items: sortMineFirst(data?.newRequests ?? []),
+      items: data?.newRequests ?? [],
       headerColor: 'bg-red-500',
       badgeColor: 'bg-red-100 text-red-700',
     },
     {
       key: 'requested',
       title: '수령 완료',
-      items: sortMineFirst(data?.requested ?? []),
+      items: data?.requested ?? [],
       headerColor: 'bg-blue-500',
       badgeColor: 'bg-blue-100 text-blue-700',
     },
     {
       key: 'scheduled',
       title: '예정',
-      items: sortMineFirst(data?.scheduled ?? []),
+      items: data?.scheduled ?? [],
       headerColor: 'bg-indigo-500',
       badgeColor: 'bg-indigo-100 text-indigo-700',
     },
     {
       key: 'today',
       title: '오늘 작업',
-      items: sortMineFirst(data?.today ?? []),
+      items: data?.today ?? [],
       headerColor: 'bg-purple-500',
       badgeColor: 'bg-purple-100 text-purple-700',
     },
     {
       key: 'completed',
       title: '완료',
-      items: sortMineFirst(data?.completed ?? []),
+      items: data?.completed ?? [],
       headerColor: 'bg-green-500',
       badgeColor: 'bg-green-100 text-green-700',
     },
@@ -191,9 +241,7 @@ export default function OperationsDashboardPage() {
                 headerColor={s.headerColor}
                 badgeColor={s.badgeColor}
               >
-                {s.items.map((c) => (
-                  <DashboardCard key={c.id} card={c} isMine={myBranchIds.has(c.branch.id)} />
-                ))}
+                <SectionGroupedCards items={s.items} myBranchIds={myBranchIds} />
               </Section>
             ))}
           </div>
@@ -208,9 +256,7 @@ export default function OperationsDashboardPage() {
                 headerColor={s.headerColor}
                 badgeColor={s.badgeColor}
               >
-                {s.items.map((c) => (
-                  <DashboardCard key={c.id} card={c} isMine={myBranchIds.has(c.branch.id)} />
-                ))}
+                <SectionGroupedCards items={s.items} myBranchIds={myBranchIds} />
               </Section>
             ))}
           </div>

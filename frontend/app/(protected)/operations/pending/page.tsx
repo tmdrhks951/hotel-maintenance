@@ -9,6 +9,7 @@ import PriorityBadge from '@/components/ui/PriorityBadge';
 import Modal from '@/components/ui/Modal';
 import { REQUEST_CATEGORY_LABEL } from '@/types';
 import type { OperationsCard } from '@/types';
+import { groupByDateThenBranch } from '@/lib/groupCards';
 
 // ================================================================
 // 유틸
@@ -41,18 +42,29 @@ function PendingCard({
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2"
+      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5"
     >
+      {/* 1순위 메인: 지점 + 객실 */}
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{card.title}</h4>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold text-gray-900 truncate">
+            {card.branch.name}
+            {card.roomNumber && <span className="ml-1.5">{card.roomNumber}</span>}
+          </div>
+          {/* 2순위 메인: 위치 */}
+          {card.location && (
+            <div className="text-sm text-gray-700 truncate mt-0.5">{card.location.name}</div>
+          )}
+        </div>
         <PriorityBadge priority={card.priority} isEmergency={card.isEmergency} />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-gray-500">{card.branch.name}</span>
-        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+      {/* 3순위 보조: 카테고리 + 작업내용(title) + 상태 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[card.category]}
         </span>
+        <span className="text-xs text-gray-500 truncate flex-1 min-w-0">{card.title}</span>
         <StatusBadge status={card.status} />
       </div>
 
@@ -87,18 +99,29 @@ function ClosedCard({ card }: { card: OperationsCard }) {
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-2"
+      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5"
     >
+      {/* 1순위 메인: 지점 + 객실 */}
       <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-gray-900 line-clamp-2 flex-1">{card.title}</h4>
+        <div className="flex-1 min-w-0">
+          <div className="text-base font-bold text-gray-900 truncate">
+            {card.branch.name}
+            {card.roomNumber && <span className="ml-1.5">{card.roomNumber}</span>}
+          </div>
+          {/* 2순위 메인: 위치 */}
+          {card.location && (
+            <div className="text-sm text-gray-700 truncate mt-0.5">{card.location.name}</div>
+          )}
+        </div>
         <PriorityBadge priority={card.priority} isEmergency={card.isEmergency} />
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-gray-500">{card.branch.name}</span>
-        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+      {/* 3순위 보조: 카테고리 + 작업내용(title) + 상태 */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-[11px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[card.category]}
         </span>
+        <span className="text-xs text-gray-500 truncate flex-1 min-w-0">{card.title}</span>
         <StatusBadge status={card.status} />
       </div>
 
@@ -197,9 +220,29 @@ export default function OperationsPendingPage() {
             {pendingCards.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">데이터가 없습니다</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {pendingCards.map((c) => (
-                  <PendingCard key={c.id} card={c} onConfirmClick={setSelectedCard} />
+              /* [PATCH] 날짜 → 지점 2단 그룹핑 */
+              <div className="space-y-4">
+                {groupByDateThenBranch(
+                  pendingCards,
+                  (c) => c.qcVerifiedAt ?? c.updatedAt,
+                ).map((g) => (
+                  <div key={g.dateKey} className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-500 border-b border-gray-100 pb-1">
+                      {g.dateLabel}
+                    </div>
+                    {g.branches.map((b) => (
+                      <div key={b.branchId} className="space-y-2">
+                        <div className="text-[11px] font-medium text-gray-400 pl-1">
+                          {b.branchName}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {b.items.map((c) => (
+                            <PendingCard key={c.id} card={c} onConfirmClick={setSelectedCard} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
@@ -217,9 +260,29 @@ export default function OperationsPendingPage() {
             {recentClosed.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">데이터가 없습니다</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {recentClosed.map((c) => (
-                  <ClosedCard key={c.id} card={c} />
+              /* [PATCH] 날짜 → 지점 2단 그룹핑 */
+              <div className="space-y-4">
+                {groupByDateThenBranch(
+                  recentClosed,
+                  (c) => c.operationsConfirmedAt ?? c.updatedAt,
+                ).map((g) => (
+                  <div key={g.dateKey} className="space-y-2">
+                    <div className="text-xs font-semibold text-gray-500 border-b border-gray-100 pb-1">
+                      {g.dateLabel}
+                    </div>
+                    {g.branches.map((b) => (
+                      <div key={b.branchId} className="space-y-2">
+                        <div className="text-[11px] font-medium text-gray-400 pl-1">
+                          {b.branchName}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {b.items.map((c) => (
+                            <ClosedCard key={c.id} card={c} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
