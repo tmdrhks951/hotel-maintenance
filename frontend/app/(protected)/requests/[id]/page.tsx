@@ -184,14 +184,12 @@ export default function RequestDetailPage() {
                 label="객실"
                 value={request.roomNumber ?? <span className="text-gray-400">-</span>}
               />
-              <InfoRow
-                label="위치"
-                value={
-                  request.location
-                    ? `${request.location.name}${request.location.type ? ` (${LOCATION_TYPE_LABEL[request.location.type]})` : ''}`
-                    : '-'
-                }
-              />
+              {request.location && request.location.name !== request.roomNumber && (
+                <InfoRow
+                  label="위치"
+                  value={`${request.location.name}${request.location.type ? ` (${LOCATION_TYPE_LABEL[request.location.type]})` : ''}`}
+                />
+              )}
               <InfoRow label="우선순위" value={<PriorityBadge priority={request.priority} />} />
 
               {/* STEP 12: QC 수령 시 입력받은 정보 */}

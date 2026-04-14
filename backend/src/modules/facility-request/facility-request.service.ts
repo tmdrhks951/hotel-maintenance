@@ -243,11 +243,10 @@ export async function createFacilityRequest(
   if (!location) {
     throw new AppError('해당 지점의 위치를 찾을 수 없습니다', 404, true, 'LOCATION_NOT_FOUND');
   }
-  const locationName = location.name;
   const roomNumber = dto.roomNumber.trim();
 
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
-  const title = `${categoryLabel} — ${roomNumber} ${locationName}`;
+  const title = `${categoryLabel} — ${roomNumber}`;
 
   const result = await prisma.$transaction(async (tx) => {
     const request = await tx.facilityRequest.create({
