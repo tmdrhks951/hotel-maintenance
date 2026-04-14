@@ -253,7 +253,7 @@ export default function NewFacilityRequestPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               지점 선택 <span className="text-red-500">*</span>
             </label>
-            {isMember ? (
+            {isMember && (branches?.length ?? 0) <= 1 ? (
               <div className="border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm text-gray-700">
                 {branches?.find((b) => b.id === branchId)?.name ?? '지점 로딩 중...'}
               </div>
