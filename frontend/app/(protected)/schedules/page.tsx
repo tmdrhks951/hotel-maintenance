@@ -27,7 +27,8 @@ import {
 } from '@/types';
 
 const CATEGORIES: RequestCategory[] = [
-  'PLUMBING', 'ELECTRICAL', 'HVAC', 'FURNITURE', 'CLEANING', 'STRUCTURAL', 'SAFETY', 'OTHER',
+  'SILICONE', 'WALLPAPER', 'PAINTING', 'FURNITURE', 'LIGHTING', 'PLUMBING',
+  'DOOR', 'APPLIANCE', 'HVAC', 'ELECTRICAL', 'SAFETY', 'OTHER',
 ];
 const RECURRENCE_TYPES: RecurrenceType[] = ['DAILY', 'WEEKLY', 'MONTHLY'];
 const LEADER_POSITIONS: Position[] = ['TEAM_LEADER', 'DEPUTY_LEADER'];

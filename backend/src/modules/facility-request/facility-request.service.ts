@@ -20,13 +20,17 @@ import type {
 // ================================================================
 
 const CATEGORY_LABEL: Record<string, string> = {
-  PLUMBING: '배관/수도',
-  ELECTRICAL: '전기',
-  HVAC: '냉난방',
+  SILICONE: '실리콘/방수',
+  WALLPAPER: '벽지/시트지',
+  PAINTING: '도장/페인트',
   FURNITURE: '가구/비품',
-  CLEANING: '청소/위생',
-  STRUCTURAL: '구조/건축',
-  SAFETY: '안전/보안',
+  LIGHTING: '조명',
+  PLUMBING: '배관/수도',
+  DOOR: '도어/창호',
+  APPLIANCE: 'TV/가전',
+  HVAC: '냉난방/환기',
+  ELECTRICAL: '전기/콘센트',
+  SAFETY: '안전/소방',
   OTHER: '기타',
 };
 
