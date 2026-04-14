@@ -273,6 +273,7 @@ export interface OperationsCard extends FacilityRequestCard {
   qcVerifiedBy: { id: string; name: string } | null;
   operationsConfirmedAt: string | null;
   operationsConfirmedBy: { id: string; name: string } | null;
+  _count?: { comments: number };
 }
 
 // STEP 8: 운영팀 확인 큐 응답
@@ -301,8 +302,9 @@ export interface WorkHistoryItem {
   operationsConfirmedBy: { id: string; name: string } | null;
 }
 
-// 운영팀 대시보드 응답 (4개 섹션)
+// 운영팀 대시보드 응답 (5개 섹션)
 export interface OperationsDashboard {
+  newRequests: OperationsCard[];
   requested: OperationsCard[];
   scheduled: OperationsCard[];
   today: OperationsCard[];

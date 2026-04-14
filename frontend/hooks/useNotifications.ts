@@ -18,8 +18,8 @@ export function useUnreadCount() {
   return useQuery<number>({
     queryKey: ['unread-count'],
     queryFn: async () => {
-      const { data } = await apiClient.get<ApiResponse<number>>('/notifications/unread-count');
-      return data.data;
+      const { data } = await apiClient.get<ApiResponse<{ count: number }>>('/notifications/unread-count');
+      return data.data.count;
     },
     refetchInterval: 60_000, // SSE가 실시간 처리, 폴링은 백업
   });

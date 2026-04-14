@@ -1,5 +1,6 @@
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
+import { fanOut } from '../notification/notification.service';
 import type { CreateCommentDto } from './comment.dto';
 
 // ================================================================
@@ -56,10 +57,10 @@ export async function createComment(
     throw new AppError('댓글 내용을 입력해주세요', 400, true, 'VALIDATION_ERROR');
   }
 
-  // 요청 존재 확인
+  // 요청 존재 확인 + 알림 대상 조회
   const request = await prisma.facilityRequest.findUnique({
     where: { id: requestId },
-    select: { id: true },
+    select: { id: true, title: true, createdById: true, assignedToId: true },
   });
   if (!request) {
     throw new AppError('요청을 찾을 수 없습니다', 404, true, 'NOT_FOUND');
@@ -88,7 +89,7 @@ export async function createComment(
     rootId = parent.rootId ?? parent.id;
   }
 
-  return prisma.comment.create({
+  const comment = await prisma.comment.create({
     data: {
       content,
       depth,
@@ -99,6 +100,30 @@ export async function createComment(
     },
     select: COMMENT_SELECT,
   });
+
+  // 댓글 알림: 요청 생성자 + 담당자 + 기존 댓글 작성자 (본인 제외)
+  prisma.comment.findMany({
+    where: { requestId, deletedAt: null, authorId: { not: authorId } },
+    select: { authorId: true },
+    distinct: ['authorId'],
+  })
+    .then((commenters) => {
+      const ids = new Set<string>();
+      if (request.createdById && request.createdById !== authorId) ids.add(request.createdById);
+      if (request.assignedToId && request.assignedToId !== authorId) ids.add(request.assignedToId);
+      commenters.forEach((c) => ids.add(c.authorId));
+      if (ids.size === 0) return;
+      return fanOut({
+        type: 'COMMENT_CREATED',
+        recipientIds: [...ids],
+        requestId,
+        title: `새 댓글: ${request.title}`,
+        message: content.length > 50 ? content.slice(0, 50) + '…' : content,
+      });
+    })
+    .catch(() => {});
+
+  return comment;
 }
 
 // ================================================================

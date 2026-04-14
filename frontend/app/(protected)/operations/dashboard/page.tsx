@@ -48,7 +48,17 @@ function DashboardCard({ card }: { card: OperationsCard }) {
 
       <div className="flex items-center justify-between text-xs text-gray-400">
         <span>{card.assignedTo ? card.assignedTo.name : '미배정'}</span>
-        <span>{formatDate(card.plannedWorkDate)}</span>
+        <div className="flex items-center gap-2">
+          {(card._count?.comments ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-gray-500">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+              {card._count!.comments}
+            </span>
+          )}
+          <span>{formatDate(card.plannedWorkDate)}</span>
+        </div>
       </div>
     </div>
   );
@@ -97,8 +107,15 @@ export default function OperationsDashboardPage() {
 
   const sections = [
     {
+      key: 'newRequests',
+      title: '신규 요청',
+      items: data?.newRequests ?? [],
+      headerColor: 'bg-red-500',
+      badgeColor: 'bg-red-100 text-red-700',
+    },
+    {
       key: 'requested',
-      title: '요청됨',
+      title: '수령 완료',
       items: data?.requested ?? [],
       headerColor: 'bg-blue-500',
       badgeColor: 'bg-blue-100 text-blue-700',
@@ -158,7 +175,7 @@ export default function OperationsDashboardPage() {
           </div>
 
           {/* 데스크탑: 4열 그리드 */}
-          <div className="hidden lg:grid lg:grid-cols-4 gap-5">
+          <div className="hidden lg:grid lg:grid-cols-5 gap-5">
             {sections.map((s) => (
               <Section
                 key={s.key}

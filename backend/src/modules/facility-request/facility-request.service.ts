@@ -1183,6 +1183,7 @@ export async function getOperationsDashboard(
     completedBy:           { select: { id: true, name: true } },
     qcVerifiedBy:          { select: { id: true, name: true } },
     operationsConfirmedBy: { select: { id: true, name: true } },
+    _count: { select: { comments: { where: { deletedAt: null } } } },
   } as const;
 
   // 오늘 날짜 범위 (자정 ~ 다음날 자정)
@@ -1191,8 +1192,15 @@ export async function getOperationsDashboard(
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  const [requested, scheduled, today, completed] = await Promise.all([
-    // 일정 요청 — RECEIVED 상태
+  const [newRequests, requested, scheduled, today, completed] = await Promise.all([
+    // 신규 요청 — PENDING / REQUESTED 상태 (QC 수령 전)
+    prisma.facilityRequest.findMany({
+      where: { ...baseWhere, status: { in: ['PENDING', 'REQUESTED', 'REVIEW_REQUIRED'] } },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { createdAt: 'desc' }],
+    }),
+
+    // 수령 완료 — RECEIVED 상태
     prisma.facilityRequest.findMany({
       where: { ...baseWhere, status: 'RECEIVED' },
       select: cardSelect,
@@ -1232,7 +1240,7 @@ export async function getOperationsDashboard(
     }),
   ]);
 
-  return { requested, scheduled, today, completed };
+  return { newRequests, requested, scheduled, today, completed };
 }
 
 // ================================================================
