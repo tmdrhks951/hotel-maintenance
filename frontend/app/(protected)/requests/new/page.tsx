@@ -59,6 +59,9 @@ export default function NewFacilityRequestPage() {
   const [titleEdited, setTitleEdited] = useState(false);
   const [description, setDescription] = useState<string>('');
   const [photo, setPhoto] = useState<File | null>(null);
+  /// [PATCH START] 위치 자유 입력
+  const [locationText, setLocationText] = useState<string>('');
+  /// [PATCH END]
 
   // Duplicate check
   const [dupResult, setDupResult] = useState<DuplicateCheckResult | null>(null);
@@ -85,27 +88,31 @@ export default function NewFacilityRequestPage() {
   // ----------------------------------------------------------------
   useEffect(() => {
     setLocationId('');
+    /// [PATCH START] 객실·위치텍스트도 리셋
+    setRoomNumber('');
+    setLocationText('');
+    /// [PATCH END]
     setDupResult(null);
   }, [branchId]);
+
+  /// [PATCH START] 객실 선택 시 roomNumber + locationId 동시 설정
+  const handleRoomChange = (locId: string) => {
+    setLocationId(locId);
+    const loc = locations?.find((l) => l.id === locId);
+    setRoomNumber(loc?.name ?? '');
+  };
+  /// [PATCH END]
 
   // ----------------------------------------------------------------
   // Auto-generate title
   // ----------------------------------------------------------------
-  const selectedLocation = useMemo(
-    () => locations?.find((l) => l.id === locationId) ?? null,
-    [locations, locationId],
-  );
-
   useEffect(() => {
     if (!titleEdited) {
       const catLabel = REQUEST_CATEGORY_LABEL[category] ?? '';
-      const locName = selectedLocation?.name ?? '';
       const room = roomNumber.trim();
-      // STEP 12: 객실 번호 포함 형식 — "{카테고리} — {객실} {위치}"
-      const parts = [catLabel, room && locName ? `— ${room} ${locName}` : room ? `— ${room}` : locName ? `— ${locName}` : ''];
-      setTitle(parts.filter(Boolean).join(' ').trim());
+      setTitle(room ? `${catLabel} — ${room}` : catLabel);
     }
-  }, [category, selectedLocation, titleEdited, roomNumber]);
+  }, [category, titleEdited, roomNumber]);
 
   // ----------------------------------------------------------------
   // Duplicate check when branchId + locationId are both set
@@ -157,15 +164,21 @@ export default function NewFacilityRequestPage() {
     setError('');
 
     if (!branchId) { setError('지점을 선택해주세요'); return; }
-    if (!roomNumber.trim()) { setError('객실 정보를 입력해주세요'); return; }
-    if (!locationId) { setError('위치를 선택해주세요'); return; }
+    /// [PATCH START] 객실 선택이 필수(이제 드롭다운), 위치는 선택 사항
+    if (!locationId) { setError('객실을 선택해주세요'); return; }
+    /// [PATCH END]
     if (!category) { setError('카테고리를 선택해주세요'); return; }
     if (!description.trim()) { setError('작업 내용을 입력해주세요'); return; }
     if (!title.trim()) { setError('제목을 입력해주세요'); return; }
 
+    /// [PATCH START] 위치 자유 입력값을 description 앞에 prefix
+    const locPrefix = locationText.trim() ? `[위치] ${locationText.trim()}\n` : '';
+    const fullDescription = `${locPrefix}${description.trim()}`;
+    /// [PATCH END]
+
     const fd = new FormData();
     fd.append('title', title.trim());
-    fd.append('description', description.trim());
+    fd.append('description', fullDescription);
     fd.append('category', category);
     fd.append('branchId', branchId);
     fd.append('roomNumber', roomNumber.trim());
@@ -258,32 +271,19 @@ export default function NewFacilityRequestPage() {
             )}
           </div>
 
-          {/* 2. 객실 번호 */}
+          {/* 2. 객실 선택 */}
+          {/* /// [PATCH START] 객실 = 지점 Location 드롭다운 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               객실 <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              value={roomNumber}
-              onChange={(e) => setRoomNumber(e.target.value)}
-              placeholder="예: 205호"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* 3. 위치 선택 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              위치 선택 <span className="text-red-500">*</span>
-            </label>
             <select
               value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
+              onChange={(e) => handleRoomChange(e.target.value)}
               disabled={!branchId}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
             >
-              <option value="">위치를 선택하세요</option>
+              <option value="">객실을 선택하세요</option>
               {locationGroups.map((group) => (
                 <optgroup key={group.type} label={group.label}>
                   {group.locations.map((loc) => (
@@ -293,6 +293,23 @@ export default function NewFacilityRequestPage() {
               ))}
             </select>
           </div>
+          {/* /// [PATCH END] */}
+
+          {/* 3. 위치 선택 (자유 입력) */}
+          {/* /// [PATCH START] 위치 = 자유 입력 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              위치 선택 <span className="text-gray-400">(선택)</span>
+            </label>
+            <input
+              type="text"
+              value={locationText}
+              onChange={(e) => setLocationText(e.target.value)}
+              placeholder="예: 화장실 세면대 밑"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          {/* /// [PATCH END] */}
 
           {/* Duplicate warning */}
           {dupResult?.hasActiveRequest && (
@@ -343,8 +360,8 @@ export default function NewFacilityRequestPage() {
                 onClick={() => {
                   setTitleEdited(false);
                   const catLabel = REQUEST_CATEGORY_LABEL[category] ?? '';
-                  const locName = selectedLocation?.name ?? '';
-                  setTitle(`${catLabel} ${locName}`.trim());
+                  const room = roomNumber.trim();
+                  setTitle(room ? `${catLabel} — ${room}` : catLabel);
                 }}
                 className="text-xs text-blue-500 hover:text-blue-700 mt-1 transition-colors"
               >
