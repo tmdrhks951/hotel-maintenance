@@ -235,18 +235,18 @@ export interface FacilityRequestDetail extends FacilityRequestCard {
   operationsConfirmedBy: { id: string; name: string } | null;
   // STEP 11
   reopenCount: number;
-  // STEP 12: QC 수령 시 입력받는 필드들
-  estimatedDuration: number | null;
-  maintenanceRequired: boolean | null;
-  // STEP 12: 팀장급 보고 체크
-  opsReported: boolean;
-  opsReportedAt: string | null;
-  opsReportedById: string | null;
-  opsReportedBy: { id: string; name: string } | null;
-  qcReported: boolean;
-  qcReportedAt: string | null;
-  qcReportedById: string | null;
-  qcReportedBy: { id: string; name: string } | null;
+  // STEP 12: QC 수령 시 입력받는 필드들 (배포 과도기엔 undefined 가능)
+  estimatedDuration?: number | null;
+  maintenanceRequired?: boolean | null;
+  // STEP 12: 팀장급 보고 체크 (배포 과도기엔 undefined 가능)
+  opsReported?: boolean;
+  opsReportedAt?: string | null;
+  opsReportedById?: string | null;
+  opsReportedBy?: { id: string; name: string } | null;
+  qcReported?: boolean;
+  qcReportedAt?: string | null;
+  qcReportedById?: string | null;
+  qcReportedBy?: { id: string; name: string } | null;
   media: Media[];
   statusLogs: StatusLog[];
 }

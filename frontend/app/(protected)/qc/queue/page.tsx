@@ -60,25 +60,15 @@ function RequestCard({ card, onQuickAction }: {
         </span>
       </div>
 
-      {/* 빠른 액션 */}
-      {onQuickAction && (
+      {/* 빠른 액션 — START_WORK만 빠른 처리 (RECEIVE는 상세 페이지에서 폼 입력 필요) */}
+      {onQuickAction && (card.status === 'RECEIVED' || card.status === 'SCHEDULED') && (
         <div className="flex gap-2 pt-1 border-t border-gray-100">
-          {card.status === 'REQUESTED' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction('RECEIVE'); }}
-              className="flex-1 text-xs py-1.5 rounded bg-blue-50 text-blue-700 font-medium hover:bg-blue-100"
-            >
-              수령
-            </button>
-          )}
-          {(card.status === 'RECEIVED' || card.status === 'SCHEDULED') && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onQuickAction('START_WORK'); }}
-              className="flex-1 text-xs py-1.5 rounded bg-purple-50 text-purple-700 font-medium hover:bg-purple-100"
-            >
-              작업 시작
-            </button>
-          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onQuickAction('START_WORK'); }}
+            className="flex-1 text-xs py-1.5 rounded bg-purple-50 text-purple-700 font-medium hover:bg-purple-100"
+          >
+            작업 시작
+          </button>
         </div>
       )}
     </div>
@@ -121,10 +111,13 @@ export default function QcQueuePage() {
   const { data, isLoading } = useQcQueue(branchId ?? undefined);
 
   // 빠른 액션 핸들러 — 각 카드에서 requestId 캡처
+  // RECEIVE는 필수 폼 입력이 필요해 상세 페이지에서만 처리, START_WORK만 카드에서 가능
   function QuickActionCard({ card }: { card: FacilityRequestCard }) {
     const review = useQcReview(card.id);
     const handleAction = (action: string) => {
-      review.mutate({ action: action as 'RECEIVE' | 'START_WORK' });
+      if (action === 'START_WORK') {
+        review.mutate({ action: 'START_WORK' });
+      }
     };
     return <RequestCard card={card} onQuickAction={handleAction} />;
   }

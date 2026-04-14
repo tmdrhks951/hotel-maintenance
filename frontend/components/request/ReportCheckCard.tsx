@@ -81,9 +81,9 @@ export default function ReportCheckCard({ request, onRefresh }: Props) {
         {/* 운영팀 보고 체크 */}
         <ReportRow
           label="운영팀 보고"
-          checked={request.opsReported}
-          reportedAt={request.opsReportedAt}
-          reportedBy={request.opsReportedBy}
+          checked={request.opsReported ?? false}
+          reportedAt={request.opsReportedAt ?? null}
+          reportedBy={request.opsReportedBy ?? null}
           canEdit={canEditOps}
           pending={toggleOps.isPending}
           onToggle={handleToggleOps}
@@ -92,9 +92,9 @@ export default function ReportCheckCard({ request, onRefresh }: Props) {
         {/* QC팀 보고 체크 */}
         <ReportRow
           label="QC팀 보고"
-          checked={request.qcReported}
-          reportedAt={request.qcReportedAt}
-          reportedBy={request.qcReportedBy}
+          checked={request.qcReported ?? false}
+          reportedAt={request.qcReportedAt ?? null}
+          reportedBy={request.qcReportedBy ?? null}
           canEdit={canEditQc}
           pending={toggleQc.isPending}
           onToggle={handleToggleQc}
