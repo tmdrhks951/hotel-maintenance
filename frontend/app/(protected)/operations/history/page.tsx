@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWorkHistory } from '@/hooks/useQcQueue';
+import { useWorkHistory, useToggleOpsReport } from '@/hooks/useQcQueue';
 import type { WorkHistoryParams } from '@/hooks/useQcQueue';
+import { useAuthStore } from '@/stores/authStore';
 import BranchFilter from '@/components/ui/BranchFilter';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { REQUEST_CATEGORY_LABEL, REQUEST_STATUS_LABEL } from '@/types';
@@ -34,10 +35,61 @@ function monthAgoStr(): string {
 }
 
 // ================================================================
+// [PATCH] 운영팀 보고 체크 셀 — 팀장급만 토글, 그 외는 read-only 뱃지
+// ================================================================
+
+function OpsReportCell({
+  item,
+  canToggle,
+}: {
+  item: WorkHistoryItem;
+  canToggle: boolean;
+}) {
+  const toggle = useToggleOpsReport(item.id);
+  const reported = item.opsReported ?? false;
+
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canToggle || toggle.isPending) return;
+    toggle.mutate({ reported: !reported });
+  };
+
+  if (!canToggle) {
+    return reported ? (
+      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+        보고
+      </span>
+    ) : (
+      <span className="text-xs text-gray-300">-</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={toggle.isPending}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold transition-colors disabled:opacity-50 ${
+        reported
+          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+      }`}
+    >
+      <span
+        className={`inline-block w-3 h-3 rounded-sm border ${
+          reported ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-400'
+        }`}
+      />
+      {reported ? '보고' : '미보고'}
+    </button>
+  );
+}
+
+// ================================================================
 // 테이블 행 (데스크탑)
 // ================================================================
 
-function HistoryRow({ item }: { item: WorkHistoryItem }) {
+function HistoryRow({ item, canToggle }: { item: WorkHistoryItem; canToggle: boolean }) {
   const router = useRouter();
 
   return (
@@ -58,6 +110,10 @@ function HistoryRow({ item }: { item: WorkHistoryItem }) {
       <td className="px-4 py-3 text-xs text-gray-600">{item.assignedTo?.name ?? '-'}</td>
       <td className="px-4 py-3 text-xs text-gray-500">{formatDate(item.plannedWorkDate)}</td>
       <td className="px-4 py-3 text-xs text-gray-500">{formatDate(item.completedAt)}</td>
+      {/* [PATCH] 보고 컬럼 */}
+      <td className="px-4 py-3 text-center">
+        <OpsReportCell item={item} canToggle={canToggle} />
+      </td>
     </tr>
   );
 }
@@ -66,7 +122,7 @@ function HistoryRow({ item }: { item: WorkHistoryItem }) {
 // 카드 (모바일)
 // ================================================================
 
-function HistoryCard({ item }: { item: WorkHistoryItem }) {
+function HistoryCard({ item, canToggle }: { item: WorkHistoryItem; canToggle: boolean }) {
   const router = useRouter();
 
   return (
@@ -84,6 +140,8 @@ function HistoryCard({ item }: { item: WorkHistoryItem }) {
         <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[item.category]}
         </span>
+        {/* [PATCH] 보고 체크 */}
+        <OpsReportCell item={item} canToggle={canToggle} />
       </div>
 
       <div className="flex items-center justify-between text-xs text-gray-400">
@@ -118,13 +176,20 @@ export default function OperationsHistoryPage() {
   const { data, isLoading } = useWorkHistory(params);
   const items = data ?? [];
 
+  /// [PATCH] 운영팀 팀장급(TEAM_LEADER/DEPUTY_LEADER)만 보고 체크 토글 가능
+  const user = useAuthStore((s) => s.user);
+  const canToggleReport =
+    user?.role === 'OPERATIONS' &&
+    (user?.position === 'TEAM_LEADER' || user?.position === 'DEPUTY_LEADER');
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     setSearchKeyword(keyword);
   }
 
   function handleExport() {
-    const headers = ['제목', '카테고리', '상태', '지점', '담당자', '예정일', '완료일'];
+    /// [PATCH] 보고여부 컬럼 CSV에 포함
+    const headers = ['제목', '카테고리', '상태', '지점', '담당자', '예정일', '완료일', '보고여부'];
     const rows = items.map((item) => [
       item.title,
       REQUEST_CATEGORY_LABEL[item.category],
@@ -133,6 +198,7 @@ export default function OperationsHistoryPage() {
       item.assignedTo?.name ?? '-',
       formatDate(item.plannedWorkDate),
       formatDate(item.completedAt),
+      item.opsReported ? '보고' : '미보고',
     ]);
     const filename = `작업이력_${todayStr()}`;
     exportToCsv(filename, headers, rows);
@@ -219,7 +285,7 @@ export default function OperationsHistoryPage() {
           {/* 모바일: 카드 목록 */}
           <div className="lg:hidden space-y-2.5">
             {items.map((item) => (
-              <HistoryCard key={item.id} item={item} />
+              <HistoryCard key={item.id} item={item} canToggle={canToggleReport} />
             ))}
           </div>
 
@@ -235,11 +301,13 @@ export default function OperationsHistoryPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">담당자</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">예정일</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
+                  {/* [PATCH] 보고 컬럼 */}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">보고</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map((item) => (
-                  <HistoryRow key={item.id} item={item} />
+                  <HistoryRow key={item.id} item={item} canToggle={canToggleReport} />
                 ))}
               </tbody>
             </table>

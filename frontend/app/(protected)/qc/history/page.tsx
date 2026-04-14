@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQcHistory } from '@/hooks/useQcQueue';
+import { useQcHistory, useToggleQcReport } from '@/hooks/useQcQueue';
+import { useAuthStore } from '@/stores/authStore';
 import BranchFilter from '@/components/ui/BranchFilter';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { REQUEST_CATEGORY_LABEL } from '@/types';
@@ -22,10 +23,61 @@ function formatDate(dateStr: string | null): string {
 }
 
 // ================================================================
+// [PATCH] QC 팀장 보고 체크 셀 — 팀장급만 토글, 그 외는 read-only 뱃지
+// ================================================================
+
+function QcReportCell({
+  card,
+  canToggle,
+}: {
+  card: QcHistoryCard;
+  canToggle: boolean;
+}) {
+  const toggle = useToggleQcReport(card.id);
+  const reported = card.qcReported ?? false;
+
+  const onClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canToggle || toggle.isPending) return;
+    toggle.mutate({ reported: !reported });
+  };
+
+  if (!canToggle) {
+    return reported ? (
+      <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+        보고
+      </span>
+    ) : (
+      <span className="text-xs text-gray-300">-</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={toggle.isPending}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold transition-colors disabled:opacity-50 ${
+        reported
+          ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+      }`}
+    >
+      <span
+        className={`inline-block w-3 h-3 rounded-sm border ${
+          reported ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-400'
+        }`}
+      />
+      {reported ? '보고' : '미보고'}
+    </button>
+  );
+}
+
+// ================================================================
 // 테이블 행 (데스크탑)
 // ================================================================
 
-function HistoryRow({ card }: { card: QcHistoryCard }) {
+function HistoryRow({ card, canToggle }: { card: QcHistoryCard; canToggle: boolean }) {
   const router = useRouter();
 
   return (
@@ -45,6 +97,10 @@ function HistoryRow({ card }: { card: QcHistoryCard }) {
       <td className="px-4 py-3 text-xs text-gray-600">{card.branch.name}</td>
       <td className="px-4 py-3 text-xs text-gray-600">{card.completedBy?.name ?? '-'}</td>
       <td className="px-4 py-3 text-xs text-gray-500">{formatDate(card.completedAt)}</td>
+      {/* [PATCH] 보고 컬럼 */}
+      <td className="px-4 py-3 text-center">
+        <QcReportCell card={card} canToggle={canToggle} />
+      </td>
       <td className="px-4 py-3 text-xs text-gray-500 text-center">{card._count.comments}</td>
     </tr>
   );
@@ -54,7 +110,7 @@ function HistoryRow({ card }: { card: QcHistoryCard }) {
 // 카드 (모바일)
 // ================================================================
 
-function HistoryCard({ card }: { card: QcHistoryCard }) {
+function HistoryCard({ card, canToggle }: { card: QcHistoryCard; canToggle: boolean }) {
   const router = useRouter();
 
   return (
@@ -72,6 +128,8 @@ function HistoryCard({ card }: { card: QcHistoryCard }) {
         <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
           {REQUEST_CATEGORY_LABEL[card.category]}
         </span>
+        {/* [PATCH] 보고 체크 */}
+        <QcReportCell card={card} canToggle={canToggle} />
       </div>
 
       <div className="flex items-center justify-between text-xs text-gray-400">
@@ -94,6 +152,11 @@ function HistoryCard({ card }: { card: QcHistoryCard }) {
 export default function QcHistoryPage() {
   const [branchId, setBranchId] = useState<string | null>(null);
   const { data, isLoading } = useQcHistory(branchId ?? undefined);
+  /// [PATCH] QC 팀장급(TEAM_LEADER/DEPUTY_LEADER)만 보고 체크 토글 가능
+  const user = useAuthStore((s) => s.user);
+  const canToggleReport =
+    user?.role === 'QC' &&
+    (user?.position === 'TEAM_LEADER' || user?.position === 'DEPUTY_LEADER');
 
   const items = data ?? [];
 
@@ -116,7 +179,7 @@ export default function QcHistoryPage() {
           {/* 모바일: 카드 목록 */}
           <div className="lg:hidden space-y-2.5">
             {items.map((c) => (
-              <HistoryCard key={c.id} card={c} />
+              <HistoryCard key={c.id} card={c} canToggle={canToggleReport} />
             ))}
           </div>
 
@@ -131,12 +194,14 @@ export default function QcHistoryPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">지점</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료자</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
+                  {/* [PATCH] 보고 컬럼 */}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">보고</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">댓글</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map((c) => (
-                  <HistoryRow key={c.id} card={c} />
+                  <HistoryRow key={c.id} card={c} canToggle={canToggleReport} />
                 ))}
               </tbody>
             </table>

@@ -1093,7 +1093,8 @@ export async function getQcHistory(
   return prisma.facilityRequest.findMany({
     where: {
       deletedAt: null,
-      status: 'CLOSED',
+      /// [PATCH] QC_VERIFIED(운영팀 확인 대기)도 이력에 포함 — CLOSED 단독 필터 시 누락되는 문제
+      status: { in: ['QC_VERIFIED', 'CLOSED'] },
       ...branchWhere,
     },
     select: {
@@ -1104,8 +1105,15 @@ export async function getQcHistory(
       updatedAt: true,
       completedAt: true,
       operationsConfirmedAt: true,
+      /// [PATCH] 히스토리 화면 보고 체크·부가 정보 렌더용
+      roomNumber: true,
+      opsReported: true,
+      opsReportedAt: true,
+      qcReported: true,
+      qcReportedAt: true,
       branch: { select: { id: true, name: true, code: true } },
       location: { select: { id: true, name: true, code: true, type: true } },
+      assignedTo: { select: { id: true, name: true } },
       completedBy: { select: { id: true, name: true } },
       operationsConfirmedBy: { select: { id: true, name: true } },
       _count: {
@@ -1342,9 +1350,11 @@ export async function getWorkHistory(
     : {};
 
   // AND 조건 배열 — 각 조건을 독립적으로 구성
+  /// [PATCH] OPERATIONS_CONFIRMED는 DB에 영구 저장되지 않음 (operationsConfirm이 바로 CLOSED로 점프)
+  /// [PATCH] QC_VERIFIED(운영팀 확인 대기 상태)를 이력에 포함하여 누락 문제 해결
   const AND: object[] = [
     { deletedAt: null },
-    { status: { in: ['CLOSED', 'OPERATIONS_CONFIRMED'] } },
+    { status: { in: ['QC_VERIFIED', 'CLOSED'] } },
     ...(Object.keys(branchWhere).length > 0 ? [branchWhere] : []),
   ];
 
@@ -1396,6 +1406,12 @@ export async function getWorkHistory(
       qcVerifiedAt: true,
       operationsConfirmedAt: true,
       plannedWorkDate: true,
+      /// [PATCH] 히스토리 화면 보고 체크·부가 정보 렌더용
+      roomNumber: true,
+      opsReported: true,
+      opsReportedAt: true,
+      qcReported: true,
+      qcReportedAt: true,
       branch:                { select: { id: true, name: true, code: true } },
       location:              { select: { id: true, name: true, code: true } },
       assignedTo:            { select: { id: true, name: true } },
@@ -1403,7 +1419,8 @@ export async function getWorkHistory(
       qcVerifiedBy:          { select: { id: true, name: true } },
       operationsConfirmedBy: { select: { id: true, name: true } },
     },
-    orderBy: { operationsConfirmedAt: 'desc' },
+    /// [PATCH] operationsConfirmedAt은 QC_VERIFIED 단계에선 NULL이므로 updatedAt으로 정렬
+    orderBy: { updatedAt: 'desc' },
     take: 100,
   });
 

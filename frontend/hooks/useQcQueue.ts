@@ -377,6 +377,9 @@ export function useToggleOpsReport(requestId: string) {
     onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
+      /// [PATCH] 히스토리 화면에서 토글 시 즉시 반영되도록 캐시 무효화 확장
+      qc.invalidateQueries({ queryKey: ['qc-history'] });
+      qc.invalidateQueries({ queryKey: ['work-history'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });
@@ -400,6 +403,9 @@ export function useToggleQcReport(requestId: string) {
       qc.invalidateQueries({ queryKey: ['qc-queue'] });
       qc.invalidateQueries({ queryKey: ['qc-completed'] });
       qc.invalidateQueries({ queryKey: ['operations-dashboard'] });
+      /// [PATCH] 히스토리 화면에서 토글 시 즉시 반영되도록 캐시 무효화 확장
+      qc.invalidateQueries({ queryKey: ['qc-history'] });
+      qc.invalidateQueries({ queryKey: ['work-history'] });
       qc.setQueryData(['facility-request', requestId], updated);
     },
   });

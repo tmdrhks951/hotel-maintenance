@@ -275,6 +275,13 @@ export interface QcHistoryCard {
   updatedAt: string;
   completedAt: string | null;
   operationsConfirmedAt: string | null;
+  /// [PATCH] 히스토리 화면 보고 체크·부가 정보 (백엔드 select 확장과 1:1)
+  roomNumber?: string | null;
+  opsReported?: boolean;
+  opsReportedAt?: string | null;
+  qcReported?: boolean;
+  qcReportedAt?: string | null;
+  assignedTo?: { id: string; name: string } | null;
   branch: { id: string; name: string; code: string };
   location: { id: string; name: string; code: string | null; type: LocationType } | null;
   completedBy: { id: string; name: string } | null;
@@ -318,6 +325,12 @@ export interface WorkHistoryItem {
   qcVerifiedAt: string | null;
   operationsConfirmedAt: string | null;
   plannedWorkDate: string | null;
+  /// [PATCH] 히스토리 화면 보고 체크·부가 정보 (백엔드 select 확장과 1:1)
+  roomNumber?: string | null;
+  opsReported?: boolean;
+  opsReportedAt?: string | null;
+  qcReported?: boolean;
+  qcReportedAt?: string | null;
   branch:   { id: string; name: string; code: string };
   location: { id: string; name: string; code: string | null } | null;
   assignedTo:            { id: string; name: string } | null;
