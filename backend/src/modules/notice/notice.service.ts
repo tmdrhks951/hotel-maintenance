@@ -10,9 +10,11 @@ function isAdminOrLeader(role: Role, position: Position): boolean {
   return role === 'ADMIN' || LEADER_POSITIONS.includes(position);
 }
 
+/// [PATCH] 공지사항 목록 모달에서 본문 미노출 → list select에 content 포함
 const NOTICE_LIST_SELECT = {
   id: true,
   title: true,
+  content: true,
   isPublished: true,
   createdAt: true,
   updatedAt: true,
