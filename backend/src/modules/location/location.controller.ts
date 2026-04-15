@@ -14,15 +14,15 @@ import type { CreateLocationDto, UpdateLocationDto, ListLocationsQuery } from '.
  * 규칙:
  *   - ADMIN: 항상 허용
  *   - TEAM_LEADER / DEPUTY_LEADER: 항상 허용 (팀 전체 지점 접근)
- *   - MEMBER / OTHER: 본인 소속 branchId와 일치해야 허용
+ *   - MEMBER / OTHER: 본인 소속 branchIds 배열에 포함된 지점만 허용
  */
 function assertBranchAccess(req: Request, branchId: string): void {
   const user = req.user!;
   if (user.role === 'ADMIN') return;
   if (user.position === 'TEAM_LEADER' || user.position === 'DEPUTY_LEADER') return;
-  if (user.branchId !== branchId) {
-    throw new AppError('해당 지점에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
-  }
+  /// [PATCH] 멀티 지점 지원 — 단일 branchId → branchIds 배열 검증으로 교체
+  if (user.branchIds.includes(branchId)) return;
+  throw new AppError('해당 지점에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
 }
 
 // ================================================================
