@@ -140,21 +140,31 @@ export default function NewFacilityRequestPage() {
   }, [branchId, locationId]);
 
   // ----------------------------------------------------------------
-  // Group locations by type
+  /// [PATCH] 객실 드롭다운 평면화 — <optgroup> 제거 + natural sort로
+  ///         일부 호수 미노출 체감 해소. 비 ROOM 타입은 label prefix 부여.
   // ----------------------------------------------------------------
-  const locationGroups = useMemo(() => {
+  const locationOptions = useMemo(() => {
     if (!locations) return [];
-    const map = new Map<LocationType, Location[]>();
-    for (const loc of locations) {
-      const arr = map.get(loc.type) ?? [];
-      arr.push(loc);
-      map.set(loc.type, arr);
-    }
-    return Array.from(map.entries()).map(([type, locs]) => ({
-      type,
-      label: LOCATION_TYPE_LABEL[type],
-      locations: locs,
-    }));
+    const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
+    const typeOrder: Record<LocationType, number> = {
+      ROOM: 0,
+      PUBLIC_AREA: 1,
+      OFFICE: 2,
+      BACK_OF_HOUSE: 3,
+    };
+    return [...locations]
+      .sort((a, b) => {
+        const t = typeOrder[a.type] - typeOrder[b.type];
+        if (t !== 0) return t;
+        return collator.compare(a.name, b.name);
+      })
+      .map((loc) => ({
+        id: loc.id,
+        label:
+          loc.type === 'ROOM'
+            ? loc.name
+            : `[${LOCATION_TYPE_LABEL[loc.type]}] ${loc.name}`,
+      }));
   }, [locations]);
 
   // ----------------------------------------------------------------
@@ -284,12 +294,9 @@ export default function NewFacilityRequestPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
             >
               <option value="">객실을 선택하세요</option>
-              {locationGroups.map((group) => (
-                <optgroup key={group.type} label={group.label}>
-                  {group.locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.name}</option>
-                  ))}
-                </optgroup>
+              {/* /// [PATCH] <optgroup> 제거 — 평면 natural sort 리스트 */}
+              {locationOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>{opt.label}</option>
               ))}
             </select>
           </div>
