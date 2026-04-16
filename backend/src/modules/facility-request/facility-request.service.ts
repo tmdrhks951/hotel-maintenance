@@ -1266,11 +1266,11 @@ export async function getOperationsDashboard(
     _count: { select: { comments: { where: { deletedAt: null } } } },
   } as const;
 
-  // 오늘 날짜 범위 (자정 ~ 다음날 자정)
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  /// [PATCH] KST(UTC+9) 기준 오늘 범위 — Railway 서버(UTC)와 무관하게 한국 시간 기준
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const kstDateStr = kstNow.toISOString().slice(0, 10);
+  const todayStart = new Date(`${kstDateStr}T00:00:00+09:00`);
+  const todayEnd   = new Date(`${kstDateStr}T23:59:59.999+09:00`);
 
   const [newRequests, requested, scheduled, today, completed] = await Promise.all([
     // 신규 요청 — PENDING / REQUESTED 상태 (QC 수령 전)
@@ -1287,21 +1287,25 @@ export async function getOperationsDashboard(
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
     }),
 
-    // 일정 확정 — SCHEDULED 상태
+    // 일정 확정 — SCHEDULED 중 오늘이 아닌 것만 (오늘 분은 today로 이동)
     prisma.facilityRequest.findMany({
-      where: { ...baseWhere, status: 'SCHEDULED' },
+      where: {
+        ...baseWhere,
+        status: 'SCHEDULED',
+        NOT: [{ plannedWorkDate: { gte: todayStart, lte: todayEnd } }],
+      },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
     }),
 
-    // 금일 진행 — 오늘 plannedWorkDate이거나 현재 진행 중인 항목
+    // 금일 작업 — 오늘 날짜의 SCHEDULED + 진행 중 항목 (날짜 없이 진행 중인 것도 포함)
     prisma.facilityRequest.findMany({
       where: {
         ...baseWhere,
-        status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] },
         OR: [
-          { plannedWorkDate: { gte: todayStart, lte: todayEnd } },
-          { plannedWorkDate: null }, // 일정 없이 진행 중인 항목도 포함
+          { status: 'SCHEDULED', plannedWorkDate: { gte: todayStart, lte: todayEnd } },
+          { status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] }, plannedWorkDate: { gte: todayStart, lte: todayEnd } },
+          { status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] }, plannedWorkDate: null },
         ],
       },
       select: cardSelect,
