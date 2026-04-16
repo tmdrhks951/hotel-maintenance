@@ -2,13 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* [PATCH] 답변이 달린 카드 하이라이트 — 선명한 인디고 펄스 */
+/* [PATCH] 답변이 달린 카드 하이라이트 — 빨강 계열 펄스 */
 @keyframes answer-glow {
-  0%, 100% { box-shadow: 0 0 8px 2px rgba(79, 70, 229, 0.3); }
-  50% { box-shadow: 0 0 18px 5px rgba(79, 70, 229, 0.5); }
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(220, 38, 38, 0.25); }
+  50% { box-shadow: 0 0 18px 5px rgba(220, 38, 38, 0.45); }
 }
 .card-answer-glow {
   animation: answer-glow 2s ease-in-out infinite;
-  border-color: rgb(129, 140, 248) !important;
-  background-color: rgba(238, 242, 255, 0.6) !important;
+  border-color: rgb(248, 113, 113) !important;
+  background-color: rgba(254, 242, 242, 0.6) !important;
 }
