@@ -369,6 +369,8 @@ export async function getQcQueue(
     location: { select: { id: true, name: true, code: true } },
     createdBy: { select: { id: true, name: true } },
     assignedTo: { select: { id: true, name: true } },
+    /// [PATCH] 답변 하이라이트용 댓글 수
+    _count: { select: { comments: { where: { deletedAt: null } } } },
   } as const;
 
   const [newRequests, reviewRequired, inProgress] = await Promise.all([
@@ -1050,6 +1052,8 @@ export async function getOperationsPending(
     completedBy: { select: { id: true, name: true } },
     qcVerifiedBy: { select: { id: true, name: true } },
     operationsConfirmedBy: { select: { id: true, name: true } },
+    /// [PATCH] 답변 하이라이트용 댓글 수
+    _count: { select: { comments: { where: { deletedAt: null } } } },
   } as const;
 
   const [pending, recentClosed] = await Promise.all([

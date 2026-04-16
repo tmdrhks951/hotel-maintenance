@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* [PATCH] 답변이 달린 카드 하이라이트 — 은은한 인디고 펄스 */
+@keyframes answer-glow {
+  0%, 100% { box-shadow: 0 0 6px 1px rgba(99, 102, 241, 0.15); }
+  50% { box-shadow: 0 0 12px 3px rgba(99, 102, 241, 0.3); }
+}
+.card-answer-glow {
+  animation: answer-glow 2.5s ease-in-out infinite;
+  border-color: rgb(199, 210, 254) !important;
+}

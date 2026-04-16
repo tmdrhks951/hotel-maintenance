@@ -110,7 +110,7 @@ function CommentItem({
     <div className={depth > 0 ? 'ml-6 border-l-2 border-gray-100 pl-4' : ''}>
       <div className="py-3">
         {isDeleted ? (
-          <p className="text-sm text-gray-400 italic">삭제된 댓글입니다</p>
+          <p className="text-sm text-gray-400 italic">삭제된 답변입니다</p>
         ) : (
           <>
             {/* Header */}
@@ -146,7 +146,7 @@ function CommentItem({
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm('댓글을 삭제하시겠습니까?')) {
+                    if (window.confirm('답변을 삭제하시겠습니까?')) {
                       deleteComment.mutate(comment.id);
                     }
                   }}
@@ -235,7 +235,7 @@ export default function CommentSection({ requestId }: Props) {
   return (
     <div>
       <h3 className="text-sm font-bold text-gray-900 mb-3">
-        댓글 {comments?.length ? `(${comments.length})` : ''}
+        답변 {comments?.length ? `(${comments.length})` : ''}
       </h3>
 
       {/* New comment */}
@@ -243,7 +243,7 @@ export default function CommentSection({ requestId }: Props) {
         <textarea
           value={newText}
           onChange={(e) => setNewText(e.target.value)}
-          placeholder="댓글을 입력하세요..."
+          placeholder="답변을 입력하세요..."
           rows={3}
           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none resize-none"
         />
@@ -254,7 +254,7 @@ export default function CommentSection({ requestId }: Props) {
             disabled={!newText.trim() || createComment.isPending}
             className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {createComment.isPending ? '등록 중...' : '댓글 등록'}
+            {createComment.isPending ? '등록 중...' : '답변 등록'}
           </button>
         </div>
       </div>
@@ -266,7 +266,7 @@ export default function CommentSection({ requestId }: Props) {
         </div>
       ) : tree.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-6">
-          아직 댓글이 없습니다.
+          아직 답변이 없습니다.
         </p>
       ) : (
         <div className="divide-y divide-gray-100">

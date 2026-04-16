@@ -222,6 +222,8 @@ export interface FacilityRequestCard extends FacilityRequest {
   scheduleChangeCount: number;
   createdBy: { id: string; name: string };
   assignedTo: { id: string; name: string } | null;
+  /// [PATCH] 답변 하이라이트용 — 기존 관계 count 노출
+  _count?: { comments: number };
 }
 
 // STEP 6+7+8: 요청 상세
@@ -569,7 +571,7 @@ export type NotificationType =
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   FACILITY_REQUEST_CREATED: '새 요청',
-  COMMENT_CREATED: '새 댓글',
+  COMMENT_CREATED: '새 답변',
   STATUS_CHANGED: '상태 변경',
   EMERGENCY_SET: '긴급 전환',
   WORKER_ASSIGNED: '작업일정 조율',

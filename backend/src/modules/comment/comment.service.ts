@@ -117,7 +117,7 @@ export async function createComment(
         type: 'COMMENT_CREATED',
         recipientIds: [...ids],
         requestId,
-        title: `새 댓글: ${request.title}`,
+        title: `새 답변: ${request.title}`,
         message: content.length > 50 ? content.slice(0, 50) + '…' : content,
       });
     })

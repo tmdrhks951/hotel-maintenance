@@ -80,11 +80,13 @@ function QcReportCell({
 
 function HistoryRow({ card, canToggle }: { card: QcHistoryCard; canToggle: boolean }) {
   const router = useRouter();
+  /// [PATCH] 답변이 달린 행 하이라이트
+  const hasAnswer = card._count.comments > 0;
 
   return (
     <tr
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="hover:bg-gray-50 cursor-pointer transition-colors"
+      className={`hover:bg-gray-50 cursor-pointer transition-colors ${hasAnswer ? 'bg-indigo-50/40' : ''}`}
     >
       <td className="px-4 py-3 text-sm text-gray-900 font-medium max-w-[240px] truncate">
         {card.title}
@@ -113,11 +115,13 @@ function HistoryRow({ card, canToggle }: { card: QcHistoryCard; canToggle: boole
 
 function HistoryCard({ card, canToggle }: { card: QcHistoryCard; canToggle: boolean }) {
   const router = useRouter();
+  /// [PATCH] 답변이 달린 카드 하이라이트
+  const hasAnswer = card._count.comments > 0;
 
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5"
+      className={`bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5 ${hasAnswer ? 'card-answer-glow' : ''}`}
     >
       {/* 1순위 메인: 지점 + 객실 */}
       <div className="flex items-start justify-between gap-2">
@@ -149,7 +153,7 @@ function HistoryCard({ card, canToggle }: { card: QcHistoryCard; canToggle: bool
         <div className="flex items-center gap-3">
           <span>{formatDate(card.completedAt)}</span>
           {card._count.comments > 0 && (
-            <span className="text-gray-500">댓글 {card._count.comments}</span>
+            <span className="text-gray-500">답변 {card._count.comments}</span>
           )}
         </div>
       </div>
@@ -225,7 +229,7 @@ export default function QcHistoryPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">완료일</th>
                   {/* [PATCH] 보고 컬럼 */}
                   <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">보고</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">댓글</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">답변</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

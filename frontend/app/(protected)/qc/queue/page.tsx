@@ -30,11 +30,13 @@ function RequestCard({ card, onQuickAction }: {
   onQuickAction?: (action: string) => void;
 }) {
   const router = useRouter();
+  /// [PATCH] 답변이 달린 카드 하이라이트
+  const hasAnswer = (card._count?.comments ?? 0) > 0;
 
   return (
     <div
       onClick={() => router.push(`/requests/${card.id}`)}
-      className="bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5"
+      className={`bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5 ${hasAnswer ? 'card-answer-glow' : ''}`}
     >
       {/* 1순위 메인: 지점 + 객실 + (우선순위 뱃지) */}
       <div className="flex items-start justify-between gap-2">

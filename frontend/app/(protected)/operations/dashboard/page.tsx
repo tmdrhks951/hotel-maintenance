@@ -31,9 +31,14 @@ function DashboardCard({ card, isMine }: { card: OperationsCard; isMine: boolean
   const router = useRouter();
 
   /// [PATCH] 본인 지점 카드는 하늘색 배경 + 좌측 굵은 파란 테두리로 시각적 구분
-  const containerCls = isMine
-    ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-1.5'
-    : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5';
+  /// [PATCH] 답변이 달린 카드는 card-answer-glow 하이라이트
+  const hasAnswer = (card._count?.comments ?? 0) > 0;
+  const containerCls = [
+    isMine
+      ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-1.5'
+      : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5',
+    hasAnswer ? 'card-answer-glow' : '',
+  ].join(' ');
 
   return (
     <div
