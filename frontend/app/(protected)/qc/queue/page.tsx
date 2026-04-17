@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQcQueue, useQcReview } from '@/hooks/useQcQueue';
 import { useAuthStore } from '@/stores/authStore';
@@ -32,6 +32,30 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
 }
 
+/// [PATCH] 답변 읽음 상태 — localStorage 기반 (운영팀 대시보드와 별개 키 사용)
+const READ_STORAGE_KEY = 'qc_queue_answer_read_v1';
+
+function getReadMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(READ_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function markAnswerRead(requestId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = getReadMap();
+    map[requestId] = new Date().toISOString();
+    window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
 // ================================================================
 // 카드 컴포넌트
 // ================================================================
@@ -46,18 +70,35 @@ function RequestCard({
   onQuickAction?: (action: string) => void;
 }) {
   const router = useRouter();
-  /// [PATCH] 답변이 달린 카드 하이라이트 (운영팀 대시보드와 동일한 glow)
+
+  /// [PATCH] 답변 읽음 추적 (운영팀 대시보드와 동일 로직)
+  const [readAt, setReadAt] = useState<string | null>(null);
+  useEffect(() => {
+    setReadAt(getReadMap()[card.id] ?? null);
+  }, [card.id]);
+
   const hasAnswer = (card._count?.comments ?? 0) > 0;
+  const latestCommentAt = card.comments?.[0]?.createdAt ?? null;
+  const hasUnreadAnswer =
+    hasAnswer && !!latestCommentAt && (!readAt || readAt < latestCommentAt);
 
   const containerCls = [
     isMine
       ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-1.5'
       : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5',
-    hasAnswer ? 'card-answer-glow' : '',
+    hasUnreadAnswer ? 'card-answer-glow' : '',
   ].join(' ');
 
+  const handleClick = () => {
+    if (hasUnreadAnswer) {
+      markAnswerRead(card.id);
+      setReadAt(new Date().toISOString());
+    }
+    router.push(`/requests/${card.id}`);
+  };
+
   return (
-    <div onClick={() => router.push(`/requests/${card.id}`)} className={containerCls}>
+    <div onClick={handleClick} className={containerCls}>
       {/* 1순위 메인: 지점 + 객실 + 우선순위 뱃지 */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">

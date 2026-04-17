@@ -371,6 +371,13 @@ export async function getQcQueue(
     assignedTo: { select: { id: true, name: true } },
     /// [PATCH] 답변 하이라이트용 댓글 수
     _count: { select: { comments: { where: { deletedAt: null } } } },
+    /// [PATCH] 읽음 추적용 — 가장 최근 답변의 createdAt만 1건
+    comments: {
+      where: { deletedAt: null },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    },
   } as const;
 
   /// [PATCH] KST 기준 오늘 경계 + 1주일 윈도우 (운영팀 대시보드와 동일 규칙)

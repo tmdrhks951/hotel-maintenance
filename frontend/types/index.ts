@@ -224,6 +224,8 @@ export interface FacilityRequestCard extends FacilityRequest {
   assignedTo: { id: string; name: string } | null;
   /// [PATCH] 답변 하이라이트용 — 기존 관계 count 노출
   _count?: { comments: number };
+  /// [PATCH] 답변 읽음 추적용 — 가장 최근 답변 1건 (createdAt만)
+  comments?: { createdAt: string }[];
 }
 
 // STEP 6+7+8: 요청 상세
@@ -315,8 +317,6 @@ export interface OperationsCard extends FacilityRequestCard {
   opsReported?: boolean;
   qcReported?: boolean;
   _count?: { comments: number };
-  /// [PATCH] 답변 읽음 추적용 — 가장 최근 답변 1건 (createdAt만)
-  comments?: { createdAt: string }[];
 }
 
 // STEP 8: 운영팀 확인 큐 응답
