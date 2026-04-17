@@ -344,11 +344,16 @@ export interface WorkHistoryItem {
 }
 
 // 운영팀 대시보드 응답 (5개 섹션)
+//   • newRequests: PENDING/REQUESTED/REVIEW_REQUIRED (QC 수령 전)
+//   • scheduled:   RECEIVED+SCHEDULED, 예정일이 오늘+1 ~ 오늘+7일 범위
+//   • today:       오늘 예정일 RECEIVED/SCHEDULED + 진행 중 + (예정일 없는 진행 중)
+//   • overdue:     예정일이 과거(<오늘)인데 아직 종료되지 않은 건
+//   • completed:   오늘 운영팀 확인 완료된 항목
 export interface OperationsDashboard {
   newRequests: OperationsCard[];
-  requested: OperationsCard[];
   scheduled: OperationsCard[];
   today: OperationsCard[];
+  overdue: OperationsCard[];
   completed: OperationsCard[];
 }
 

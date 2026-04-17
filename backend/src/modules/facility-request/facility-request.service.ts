@@ -1278,38 +1278,33 @@ export async function getOperationsDashboard(
   const kstDateStr = kstNow.toISOString().slice(0, 10);
   const todayStart = new Date(`${kstDateStr}T00:00:00+09:00`);
   const todayEnd   = new Date(`${kstDateStr}T23:59:59.999+09:00`);
+  /// [PATCH] 작업 예정 범위: 오늘+1 ~ 오늘+7일 (가시성 확보용 1주일 윈도우)
+  const weekAheadEnd = new Date(todayEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const tomorrowStart = new Date(todayEnd.getTime() + 1);
 
-  const [newRequests, requested, scheduled, today, completed] = await Promise.all([
-    // 신규 요청 — PENDING / REQUESTED 상태 (QC 수령 전)
+  const [newRequests, scheduled, today, overdue, completed] = await Promise.all([
+    // 신규 요청 — PENDING / REQUESTED / REVIEW_REQUIRED (QC 수령 전)
     prisma.facilityRequest.findMany({
       where: { ...baseWhere, status: { in: ['PENDING', 'REQUESTED', 'REVIEW_REQUIRED'] } },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'desc' }],
     }),
 
-    // 수령 완료 — RECEIVED 중 오늘 예정일이 아닌 것 (오늘 분은 today로 이동)
+    // 작업 예정 — RECEIVED + SCHEDULED 중 예정일이 내일 ~ 오늘+7일 범위
+    //   • 오늘 예정일은 'today' 컬럼 전담
+    //   • 7일 초과는 대시보드에서 숨김 (DB 보관은 유지, 시설 요청 목록 페이지에서 조회)
+    //   • 예정일 없는 건은 추후 '보류' 탭으로 분리 예정 (현재 미노출)
     prisma.facilityRequest.findMany({
       where: {
         ...baseWhere,
-        status: 'RECEIVED',
-        NOT: [{ plannedWorkDate: { gte: todayStart, lte: todayEnd } }],
+        status: { in: ['RECEIVED', 'SCHEDULED'] },
+        plannedWorkDate: { gte: tomorrowStart, lte: weekAheadEnd },
       },
       select: cardSelect,
-      orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
+      orderBy: [{ plannedWorkDate: 'asc' }, { isEmergency: 'desc' }],
     }),
 
-    // 일정 확정 — SCHEDULED 중 오늘이 아닌 것만 (오늘 분은 today로 이동)
-    prisma.facilityRequest.findMany({
-      where: {
-        ...baseWhere,
-        status: 'SCHEDULED',
-        NOT: [{ plannedWorkDate: { gte: todayStart, lte: todayEnd } }],
-      },
-      select: cardSelect,
-      orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
-    }),
-
-    // 금일 작업 — 오늘 예정일인 RECEIVED/SCHEDULED + 진행 중 항목 (날짜 없이 진행 중인 것도 포함)
+    // 오늘 작업 — 오늘 예정일 RECEIVED/SCHEDULED + 진행 중 항목 (날짜 없이 진행 중인 것도 포함)
     prisma.facilityRequest.findMany({
       where: {
         ...baseWhere,
@@ -1324,6 +1319,18 @@ export async function getOperationsDashboard(
       orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'desc' }],
     }),
 
+    // 지연된 작업 — 예정일이 과거(< 오늘 00:00)이고 아직 종료되지 않은 건
+    //   CLOSED / CANCELLED / OPERATIONS_CONFIRMED / COMPLETED 제외
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        plannedWorkDate: { lt: todayStart },
+        status: { in: ['RECEIVED', 'SCHEDULED', 'IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED', 'REOPENED'] },
+      },
+      select: cardSelect,
+      orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
+    }),
+
     // 작업 완료 — 오늘 운영팀 확인 완료된 항목
     prisma.facilityRequest.findMany({
       where: {
@@ -1336,7 +1343,7 @@ export async function getOperationsDashboard(
     }),
   ]);
 
-  return { newRequests, requested, scheduled, today, completed };
+  return { newRequests, scheduled, today, overdue, completed };
 }
 
 // ================================================================
