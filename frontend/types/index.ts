@@ -365,6 +365,29 @@ export interface OperationsDashboard {
   completed: OperationsCard[];
 }
 
+// ================================================================
+// 작업 달력 — 2개월 plannedWorkDate 범위
+// ================================================================
+
+/// [PATCH] 달력 표시용 축약 카드 — 리스트 카드보다 가벼움 (2개월 범위 수십~수백 건 대응)
+export interface CalendarCard {
+  id: string;
+  title: string;
+  status: FacilityRequestStatus;
+  category: RequestCategory;
+  isEmergency: boolean;
+  priority: Priority;
+  plannedWorkDate: string; // 서버에서 null 제외하여 내려옴
+  roomNumber: string | null;
+  branch: { id: string; name: string; code: string };
+  location: { id: string; name: string; code: string | null } | null;
+  assignedTo: { id: string; name: string } | null;
+}
+
+export interface CalendarView {
+  items: CalendarCard[];
+}
+
 // STEP 6+7: QC 판단 body
 export type QcReviewAction =
   | 'MARK_REVIEW'

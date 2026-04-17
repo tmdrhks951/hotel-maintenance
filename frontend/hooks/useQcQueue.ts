@@ -7,6 +7,7 @@ import type {
   QcHistoryCard,
   OperationsPendingQueue,
   OperationsDashboard,
+  CalendarView,
   WorkHistoryItem,
   FacilityRequestDetail,
   QcReviewBody,
@@ -34,6 +35,31 @@ export function useQcQueue(branchId?: string | null) {
     },
     refetchInterval: 15_000,            // 15초 폴링 (SSE 보조)
     refetchIntervalInBackground: true,  // 탭이 비활성 상태여도 폴링 유지
+  });
+}
+
+// ================================================================
+// 작업 달력 조회 — 2개월 범위 plannedWorkDate 기준
+// ================================================================
+
+export function useCalendarView(params: {
+  startDate: string;  // YYYY-MM-DD (KST)
+  endDate:   string;  // YYYY-MM-DD (KST)
+  branchId?: string | null;
+}) {
+  const { startDate, endDate, branchId } = params;
+  return useQuery({
+    queryKey: ['calendar-view', startDate, endDate, branchId ?? null],
+    queryFn: async () => {
+      const query = new URLSearchParams({ start: startDate, end: endDate });
+      if (branchId) query.set('branchId', branchId);
+      const { data } = await apiClient.get<ApiResponse<CalendarView>>(
+        `/facility-requests/calendar?${query.toString()}`,
+      );
+      return data.data;
+    },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 }
 

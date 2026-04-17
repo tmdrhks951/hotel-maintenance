@@ -1385,6 +1385,81 @@ export async function getOperationsDashboard(
 }
 
 // ================================================================
+// 작업 달력 조회 — 2개월 범위 plannedWorkDate 기준 작업 목록
+//
+// 동작 규칙
+//  • 범위: 클라이언트에서 start/end (YYYY-MM-DD) 지정. 서버는 KST 해석.
+//  • 상태 제외: CANCELLED / PENDING / REQUESTED / REVIEW_REQUIRED
+//    (QC 수령 전/비확정 상태는 달력에 잡지 않는다 — Q4)
+//  • 기준일: plannedWorkDate가 존재하는 건만 (null 제외 — Q3)
+//  • 지점 스코프 (Q8):
+//    - OPERATIONS / VENDOR: userBranchIds 강제 스코프 (본인 지점만)
+//    - QC / ADMIN: 전체, filterBranchId로 좁힐 수 있음
+//  • 반환: 플랫 배열. 프론트에서 일자/지점별로 그룹핑.
+// ================================================================
+
+interface CalendarViewParams {
+  startDate: string; // YYYY-MM-DD (KST 기준 시작일)
+  endDate:   string; // YYYY-MM-DD (KST 기준 종료일)
+  filterBranchId?: string;
+}
+
+export async function getCalendarView(
+  role: string,
+  userBranchIds: string[],
+  params: CalendarViewParams,
+) {
+  if (!['QC', 'OPERATIONS', 'ADMIN', 'VENDOR'].includes(role)) {
+    throw new AppError('권한이 없습니다', 403, true, 'FORBIDDEN');
+  }
+
+  // 지점 스코프 — OPERATIONS/VENDOR는 본인 지점 강제, QC/ADMIN은 수동 필터
+  const branchWhere = ((role === 'OPERATIONS' || role === 'VENDOR') && userBranchIds.length > 0)
+    ? { branchId: { in: userBranchIds } }
+    : params.filterBranchId
+    ? { branchId: params.filterBranchId }
+    : {};
+
+  // KST 기준 범위 경계
+  const rangeStart = new Date(`${params.startDate}T00:00:00+09:00`);
+  const rangeEnd   = new Date(`${params.endDate}T23:59:59.999+09:00`);
+
+  if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) {
+    throw new AppError('start/end 날짜 형식이 잘못되었습니다', 400, true, 'VALIDATION_ERROR');
+  }
+  if (rangeStart > rangeEnd) {
+    throw new AppError('start는 end보다 앞서야 합니다', 400, true, 'VALIDATION_ERROR');
+  }
+
+  const cards = await prisma.facilityRequest.findMany({
+    where: {
+      deletedAt: null,
+      ...branchWhere,
+      plannedWorkDate: { gte: rangeStart, lte: rangeEnd },
+      status: {
+        notIn: ['CANCELLED', 'PENDING', 'REQUESTED', 'REVIEW_REQUIRED'],
+      },
+    },
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      category: true,
+      isEmergency: true,
+      priority: true,
+      plannedWorkDate: true,
+      roomNumber: true,
+      branch:     { select: { id: true, name: true, code: true } },
+      location:   { select: { id: true, name: true, code: true } },
+      assignedTo: { select: { id: true, name: true } },
+    },
+    orderBy: [{ plannedWorkDate: 'asc' }, { isEmergency: 'desc' }],
+  });
+
+  return { items: cards };
+}
+
+// ================================================================
 // 작업 이력 조회 — 달력(날짜별) + 키워드 검색
 //  date      : 특정 날짜 (YYYY-MM-DD) — 해당일에 완료된 항목
 //  startDate/endDate : 날짜 범위

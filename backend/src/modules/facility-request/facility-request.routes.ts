@@ -22,6 +22,7 @@ import {
   deleteFacilityRequestHandler,
   reopenFacilityRequestHandler,
   getOperationsDashboardHandler,
+  getCalendarViewHandler,
   getWorkHistoryHandler,
   toggleOpsReportHandler,
   toggleQcReportHandler,
@@ -58,6 +59,9 @@ router.get('/qc-history', authorize(Role.QC, Role.ADMIN), getQcHistoryHandler);
 
 // GET /facility-requests/operations-dashboard  (OPERATIONS/ADMIN/VENDOR)
 router.get('/operations-dashboard', authorize(Role.OPERATIONS, Role.ADMIN, Role.VENDOR), getOperationsDashboardHandler);
+
+// GET /facility-requests/calendar  (QC/OPERATIONS/ADMIN/VENDOR — 2개월 작업 달력)
+router.get('/calendar', authorize(Role.QC, Role.OPERATIONS, Role.ADMIN, Role.VENDOR), getCalendarViewHandler);
 
 // GET /facility-requests/work-history  (QC/OPERATIONS/ADMIN)
 router.get('/work-history', getWorkHistoryHandler);

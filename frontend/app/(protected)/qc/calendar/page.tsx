@@ -1,14 +1,22 @@
 'use client';
 
-import PageTabs from '@/components/ui/PageTabs';
+/// [PATCH] STEP 3: QC 작업 달력 — 당일 기준 ±1개월 범위, 지점별 배지 집계.
+///   • QC/ADMIN: 전체 + BranchFilter로 수동 좁히기 가능
+///   • (OPERATIONS는 접근 권한 없음 — 라우터/메뉴에서 차단)
 
-/// [PATCH] STEP 2: QC 달력 페이지 stub.
-///   STEP 3 에서 실제 달력 컴포넌트로 대체 예정.
+import { useState } from 'react';
+import BranchFilter from '@/components/ui/BranchFilter';
+import PageTabs from '@/components/ui/PageTabs';
+import CalendarViewPanel from '@/components/ui/CalendarViewPanel';
+
 export default function QcCalendarPage() {
+  const [branchId, setBranchId] = useState<string | null>(null);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-gray-900">QC 대기열</h1>
+        <BranchFilter value={branchId} onChange={setBranchId} />
       </div>
 
       <PageTabs
@@ -18,12 +26,7 @@ export default function QcCalendarPage() {
         ]}
       />
 
-      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 py-24 text-center">
-        <p className="text-sm text-gray-500">작업 달력 준비 중입니다.</p>
-        <p className="mt-2 text-xs text-gray-400">
-          당일 기준 ±1개월 범위의 작업을 요일별로 볼 수 있게 할 예정입니다.
-        </p>
-      </div>
+      <CalendarViewPanel branchId={branchId} />
     </div>
   );
 }

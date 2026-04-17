@@ -538,6 +538,44 @@ export async function getOperationsDashboardHandler(
 }
 
 // ================================================================
+// GET /api/v1/facility-requests/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD&branchId=...
+// ================================================================
+
+export async function getCalendarViewHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const user = req.user;
+    if (!user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+
+    const start = req.query.start;
+    const end   = req.query.end;
+    if (typeof start !== 'string' || typeof end !== 'string') {
+      next(new AppError('start/end (YYYY-MM-DD)은 필수입니다', 400, true, 'VALIDATION_ERROR'));
+      return;
+    }
+
+    const filterBranchId =
+      typeof req.query.branchId === 'string' ? req.query.branchId : undefined;
+
+    const result = await facilityRequestService.getCalendarView(
+      user.role,
+      user.branchIds,
+      { startDate: start, endDate: end, filterBranchId },
+    );
+
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ================================================================
 // GET /api/v1/facility-requests/work-history
 // ================================================================
 
