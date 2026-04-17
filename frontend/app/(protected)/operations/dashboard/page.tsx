@@ -8,6 +8,7 @@ import BranchFilter from '@/components/ui/BranchFilter';
 import StatusBadge from '@/components/ui/StatusBadge';
 import PriorityBadge from '@/components/ui/PriorityBadge';
 import Modal from '@/components/ui/Modal';
+import PageTabs from '@/components/ui/PageTabs';
 import { REQUEST_CATEGORY_LABEL } from '@/types';
 import type { OperationsCard } from '@/types';
 import { groupByDateThenBranch } from '@/lib/groupCards';
@@ -341,6 +342,85 @@ function SectionGroupedCards({
 }
 
 // ================================================================
+// [PATCH] 작업예정 — 지점별 가장 가까운 작업일 섹션 (Q6 B안)
+//   • 각 지점별로 plannedWorkDate가 가장 빠른 "하루"의 작업들만 모아서 섹션 생성
+//   • 팀원(branchIds 1개)이면 섹션 하나, 팀장/ADMIN(여러 지점)이면 지점마다 섹션 병렬 표시
+//   • myBranchIds 비어있는 경우(예: 일부 ADMIN) 전체 지점을 그대로 노출
+// ================================================================
+
+function SectionByBranchNextDate({
+  items,
+  myBranchIds,
+}: {
+  items: OperationsCard[];
+  myBranchIds: Set<string>;
+}) {
+  // 1. 지점별 그룹화 (plannedWorkDate 있는 것만)
+  const byBranch = new Map<string, { branchName: string; arr: OperationsCard[] }>();
+  for (const c of items) {
+    if (!c.plannedWorkDate) continue;
+    if (myBranchIds.size > 0 && !myBranchIds.has(c.branch.id)) continue;
+    const entry = byBranch.get(c.branch.id) ?? { branchName: c.branch.name, arr: [] };
+    entry.arr.push(c);
+    byBranch.set(c.branch.id, entry);
+  }
+
+  // 2. 각 지점의 가장 빠른 plannedWorkDate 하루치 작업들만 추출
+  const sections = Array.from(byBranch.entries())
+    .map(([branchId, { branchName, arr }]) => {
+      const sorted = [...arr].sort((a, b) =>
+        (a.plannedWorkDate ?? '').localeCompare(b.plannedWorkDate ?? ''),
+      );
+      const earliestDateKey = sorted[0].plannedWorkDate!.slice(0, 10);
+      const sameDayItems = sorted.filter(
+        (c) => c.plannedWorkDate!.slice(0, 10) === earliestDateKey,
+      );
+      return { branchId, branchName, dateKey: earliestDateKey, items: sameDayItems };
+    })
+    .sort((a, b) => {
+      // 본인 지점 먼저, 그 다음 지점명 정렬
+      const aMine = myBranchIds.has(a.branchId) ? 0 : 1;
+      const bMine = myBranchIds.has(b.branchId) ? 0 : 1;
+      if (aMine !== bMine) return aMine - bMine;
+      return a.branchName.localeCompare(b.branchName);
+    });
+
+  if (sections.length === 0) {
+    return <p className="text-xs text-gray-400 text-center py-8">예정 작업이 없습니다</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {sections.map((s) => {
+        const dateLabel = new Date(s.dateKey + 'T00:00:00+09:00').toLocaleDateString('ko-KR', {
+          month: 'long',
+          day: 'numeric',
+          weekday: 'short',
+        });
+        const isMine = myBranchIds.has(s.branchId);
+        return (
+          <div key={s.branchId} className="space-y-2">
+            <div className="flex items-baseline gap-2 pb-1.5 border-b border-orange-200">
+              <span className={`text-sm font-bold ${isMine ? 'text-blue-700' : 'text-gray-600'}`}>
+                {s.branchName}
+              </span>
+              {/* 작업 날짜 강조 — 사용자 요구: "작업날짜가 눈에 띄게" */}
+              <span className="text-sm font-extrabold text-orange-600 tracking-wide">
+                📅 {dateLabel}
+              </span>
+              <span className="text-[11px] text-gray-400 ml-auto">{s.items.length}건</span>
+            </div>
+            {s.items.map((c) => (
+              <DashboardCard key={c.id} card={c} isMine={isMine} />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ================================================================
 // 섹션 컬럼 (탭 지원)
 // ================================================================
 
@@ -469,6 +549,7 @@ export default function OperationsDashboardPage() {
       activeTab: undefined,
       onTabChange: undefined,
       canEditSchedule: false,
+      renderer: 'default' as 'default' | 'byBranch',
     },
     {
       key: 'scheduled',
@@ -481,6 +562,8 @@ export default function OperationsDashboardPage() {
       activeTab: scheduleTab as string,
       onTabChange: ((k: string) => setScheduleTab(k as ScheduleTab)) as ((k: string) => void) | undefined,
       canEditSchedule: false,
+      /// [PATCH] Q6 B안 — '예정' 탭은 지점별 다음 작업일 렌더러 사용
+      renderer: (scheduleTab === 'scheduled' ? 'byBranch' : 'default') as 'default' | 'byBranch',
     },
     {
       key: 'today',
@@ -494,6 +577,7 @@ export default function OperationsDashboardPage() {
       onTabChange: ((k: string) => setTodayTab(k as TodayTab)) as ((k: string) => void) | undefined,
       /// 지연된 작업 탭에서만 일정 수정 가능
       canEditSchedule: todayTab === 'overdue' && canEditSchedule,
+      renderer: 'default' as 'default' | 'byBranch',
     },
     {
       key: 'completed',
@@ -506,6 +590,7 @@ export default function OperationsDashboardPage() {
       activeTab: undefined,
       onTabChange: undefined,
       canEditSchedule: false,
+      renderer: 'default' as 'default' | 'byBranch',
     },
   ] as const;
 
@@ -515,6 +600,13 @@ export default function OperationsDashboardPage() {
         <h1 className="text-xl font-bold text-gray-900">운영팀 대시보드</h1>
         <BranchFilter value={branchId} onChange={setBranchId} />
       </div>
+
+      <PageTabs
+        tabs={[
+          { label: '📋 작업 대시보드', href: '/operations/dashboard' },
+          { label: '🗓️ 작업 달력',    href: '/operations/calendar' },
+        ]}
+      />
 
       {isLoading ? (
         <div className="flex justify-center py-20">
@@ -535,11 +627,15 @@ export default function OperationsDashboardPage() {
                 activeTab={s.activeTab}
                 onTabChange={s.onTabChange}
               >
-                <SectionGroupedCards
-                  items={s.items}
-                  myBranchIds={myBranchIds}
-                  canEditSchedule={s.canEditSchedule}
-                />
+                {s.renderer === 'byBranch' ? (
+                  <SectionByBranchNextDate items={s.items} myBranchIds={myBranchIds} />
+                ) : (
+                  <SectionGroupedCards
+                    items={s.items}
+                    myBranchIds={myBranchIds}
+                    canEditSchedule={s.canEditSchedule}
+                  />
+                )}
               </Section>
             ))}
           </div>
@@ -557,11 +653,15 @@ export default function OperationsDashboardPage() {
                 activeTab={s.activeTab}
                 onTabChange={s.onTabChange}
               >
-                <SectionGroupedCards
-                  items={s.items}
-                  myBranchIds={myBranchIds}
-                  canEditSchedule={s.canEditSchedule}
-                />
+                {s.renderer === 'byBranch' ? (
+                  <SectionByBranchNextDate items={s.items} myBranchIds={myBranchIds} />
+                ) : (
+                  <SectionGroupedCards
+                    items={s.items}
+                    myBranchIds={myBranchIds}
+                    canEditSchedule={s.canEditSchedule}
+                  />
+                )}
               </Section>
             ))}
           </div>
