@@ -262,10 +262,18 @@ export interface FacilityRequestDetail extends FacilityRequestCard {
 }
 
 // STEP 6: QC 큐 응답
+/// [PATCH] 4컬럼 재구성 — newRequests / (received ↔ review 탭) / todayWork / completed
+///   - newRequests: 신규 요청 (PENDING/REQUESTED/REOPENED)
+///   - received:    수령 완료 (RECEIVED/SCHEDULED, 내일~7일 이내)
+///   - review:      판단 필요 (REVIEW_REQUIRED)
+///   - todayWork:   오늘 작업 (오늘 예정 RECEIVED/SCHEDULED + 전체 IN_PROGRESS)
+///   - completed:   작업 완료 (오늘 완료 DONE_BY_QC/QC_VERIFIED/CLOSED)
 export interface QcQueue {
   newRequests: FacilityRequestCard[];
-  reviewRequired: FacilityRequestCard[];
-  inProgress: FacilityRequestCard[];
+  received: FacilityRequestCard[];
+  review: FacilityRequestCard[];
+  todayWork: FacilityRequestCard[];
+  completed: FacilityRequestCard[];
 }
 
 // STEP 9: QC 완료 이력 카드 (완료된 요청, 댓글 수 포함)

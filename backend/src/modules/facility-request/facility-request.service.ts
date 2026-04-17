@@ -373,28 +373,66 @@ export async function getQcQueue(
     _count: { select: { comments: { where: { deletedAt: null } } } },
   } as const;
 
-  const [newRequests, reviewRequired, inProgress] = await Promise.all([
+  /// [PATCH] KST 기준 오늘 경계 + 1주일 윈도우 (운영팀 대시보드와 동일 규칙)
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const kstDateStr = kstNow.toISOString().slice(0, 10);
+  const todayStart = new Date(`${kstDateStr}T00:00:00+09:00`);
+  const todayEnd   = new Date(`${kstDateStr}T23:59:59.999+09:00`);
+  const tomorrowStart = new Date(todayEnd.getTime() + 1);
+  const weekAheadEnd  = new Date(todayEnd.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const [newRequests, received, review, todayWork, completed] = await Promise.all([
     // 신규 요청: PENDING(레거시) + REQUESTED + REOPENED
     prisma.facilityRequest.findMany({
       where: { ...baseWhere, status: { in: ['PENDING', 'REQUESTED', 'REOPENED'] } },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
     }),
-    // 판단 필요
+    // 수령 완료 (RECEIVED + SCHEDULED) — 오늘은 제외(오늘 작업 컬럼 전담), 1주일 윈도우
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        status: { in: ['RECEIVED', 'SCHEDULED'] },
+        plannedWorkDate: { gte: tomorrowStart, lte: weekAheadEnd },
+      },
+      select: cardSelect,
+      orderBy: [{ plannedWorkDate: 'asc' }, { isEmergency: 'desc' }],
+    }),
+    // 검토 필요 (판단 필요)
     prisma.facilityRequest.findMany({
       where: { ...baseWhere, status: 'REVIEW_REQUIRED' },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'asc' }],
     }),
-    // 진행중: 수령 이후 ~ IN_PROGRESS
+    // 오늘 작업 — 오늘 plannedWorkDate RECEIVED/SCHEDULED + IN_PROGRESS 전체
     prisma.facilityRequest.findMany({
-      where: { ...baseWhere, status: { in: ['RECEIVED', 'SCHEDULED', 'IN_PROGRESS'] } },
+      where: {
+        ...baseWhere,
+        OR: [
+          { status: { in: ['RECEIVED', 'SCHEDULED'] }, plannedWorkDate: { gte: todayStart, lte: todayEnd } },
+          { status: 'IN_PROGRESS' },
+        ],
+      },
       select: cardSelect,
-      orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
+      orderBy: [{ isEmergency: 'desc' }, { updatedAt: 'desc' }],
+    }),
+    // 작업 완료 — 오늘 완료된 것만 (DONE_BY_QC / QC_VERIFIED / CLOSED)
+    //   OPERATIONS_CONFIRMED는 operationsConfirm()가 바로 CLOSED로 점프시키므로 실제로는 거의 발생 X
+    prisma.facilityRequest.findMany({
+      where: {
+        ...baseWhere,
+        OR: [
+          { status: 'DONE_BY_QC',  completedAt:           { gte: todayStart, lte: todayEnd } },
+          { status: 'QC_VERIFIED', qcVerifiedAt:          { gte: todayStart, lte: todayEnd } },
+          { status: 'CLOSED',      operationsConfirmedAt: { gte: todayStart, lte: todayEnd } },
+        ],
+      },
+      select: cardSelect,
+      orderBy: [{ updatedAt: 'desc' }],
     }),
   ]);
 
-  return { newRequests, reviewRequired, inProgress };
+  return { newRequests, received, review, todayWork, completed };
 }
 
 // ================================================================
