@@ -1280,9 +1280,13 @@ export async function getOperationsDashboard(
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'desc' }],
     }),
 
-    // 수령 완료 — RECEIVED 상태
+    // 수령 완료 — RECEIVED 중 오늘 예정일이 아닌 것 (오늘 분은 today로 이동)
     prisma.facilityRequest.findMany({
-      where: { ...baseWhere, status: 'RECEIVED' },
+      where: {
+        ...baseWhere,
+        status: 'RECEIVED',
+        NOT: [{ plannedWorkDate: { gte: todayStart, lte: todayEnd } }],
+      },
       select: cardSelect,
       orderBy: [{ isEmergency: 'desc' }, { createdAt: 'asc' }],
     }),
@@ -1298,11 +1302,12 @@ export async function getOperationsDashboard(
       orderBy: [{ isEmergency: 'desc' }, { plannedWorkDate: 'asc' }],
     }),
 
-    // 금일 작업 — 오늘 날짜의 SCHEDULED + 진행 중 항목 (날짜 없이 진행 중인 것도 포함)
+    // 금일 작업 — 오늘 예정일인 RECEIVED/SCHEDULED + 진행 중 항목 (날짜 없이 진행 중인 것도 포함)
     prisma.facilityRequest.findMany({
       where: {
         ...baseWhere,
         OR: [
+          { status: 'RECEIVED',  plannedWorkDate: { gte: todayStart, lte: todayEnd } },
           { status: 'SCHEDULED', plannedWorkDate: { gte: todayStart, lte: todayEnd } },
           { status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] }, plannedWorkDate: { gte: todayStart, lte: todayEnd } },
           { status: { in: ['IN_PROGRESS', 'DONE_BY_QC', 'QC_VERIFIED'] }, plannedWorkDate: null },
