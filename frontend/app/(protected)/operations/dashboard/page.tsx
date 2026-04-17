@@ -453,8 +453,9 @@ function Section<K extends string>({
   children,
 }: SectionProps<K>) {
   return (
-    <div className="flex flex-col min-h-0">
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
+    /// [PATCH] 컬럼 박스 래퍼 — 탭 버튼 포함 시 인접 컬럼과 경계 혼동 방지
+    <div className="flex flex-col min-h-0 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap pb-2 border-b border-gray-200">
         <div className={`w-1 h-4 rounded-full ${headerColor}`} />
         <h3 className="text-sm font-bold text-gray-900">{title}</h3>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badgeColor}`}>
