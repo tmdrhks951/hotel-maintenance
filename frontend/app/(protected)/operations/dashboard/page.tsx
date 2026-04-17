@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOperationsDashboard } from '@/hooks/useQcQueue';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,6 +23,33 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+/// [PATCH] 답변 읽음 상태 — localStorage에 { [requestId]: ISOString(읽은 시각) } 형태로 저장
+///   • glow 조건: latestCommentAt > readAt 이면 glow 표시
+///   • 카드 클릭 시 현재 시각을 읽음 시각으로 기록 → 즉시 glow 꺼짐
+///   • 새로운 답변이 달리면 latestCommentAt 갱신 → 다시 glow
+const READ_STORAGE_KEY = 'op_dash_answer_read_v1';
+
+function getReadMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(READ_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function markAnswerRead(requestId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = getReadMap();
+    map[requestId] = new Date().toISOString();
+    window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    /* localStorage 불가 환경은 조용히 무시 */
+  }
+}
+
 // ================================================================
 // 대시보드 카드
 // ================================================================
@@ -30,19 +57,38 @@ function formatDate(dateStr: string | null): string {
 function DashboardCard({ card, isMine }: { card: OperationsCard; isMine: boolean }) {
   const router = useRouter();
 
-  /// [PATCH] 본인 지점 카드는 하늘색 배경 + 좌측 굵은 파란 테두리로 시각적 구분
-  /// [PATCH] 답변이 달린 카드는 card-answer-glow 하이라이트
+  /// [PATCH] 답변 읽음 추적 — mount 후 localStorage에서 읽음 시각 로드 (SSR hydration 안전)
+  const [readAt, setReadAt] = useState<string | null>(null);
+  useEffect(() => {
+    setReadAt(getReadMap()[card.id] ?? null);
+  }, [card.id]);
+
   const hasAnswer = (card._count?.comments ?? 0) > 0;
+  const latestCommentAt = card.comments?.[0]?.createdAt ?? null;
+  /// ISO 8601 문자열은 사전식 비교가 곧 시간 비교와 일치
+  const hasUnreadAnswer =
+    hasAnswer && !!latestCommentAt && (!readAt || readAt < latestCommentAt);
+
+  /// [PATCH] 본인 지점 카드는 하늘색 배경 + 좌측 굵은 파란 테두리로 시각적 구분
+  /// [PATCH] 읽지 않은 답변이 있는 카드만 card-answer-glow 하이라이트
   const containerCls = [
     isMine
       ? 'bg-blue-50/60 border border-blue-200 border-l-4 border-l-blue-500 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-blue-300 transition-all space-y-1.5'
       : 'bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5',
-    hasAnswer ? 'card-answer-glow' : '',
+    hasUnreadAnswer ? 'card-answer-glow' : '',
   ].join(' ');
+
+  const handleClick = () => {
+    if (hasUnreadAnswer) {
+      markAnswerRead(card.id);
+      setReadAt(new Date().toISOString());
+    }
+    router.push(`/requests/${card.id}`);
+  };
 
   return (
     <div
-      onClick={() => router.push(`/requests/${card.id}`)}
+      onClick={handleClick}
       className={containerCls}
     >
       {/* 1순위 메인: 지점 + 객실 */}

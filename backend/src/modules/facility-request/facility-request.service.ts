@@ -1264,6 +1264,13 @@ export async function getOperationsDashboard(
     qcVerifiedBy:          { select: { id: true, name: true } },
     operationsConfirmedBy: { select: { id: true, name: true } },
     _count: { select: { comments: { where: { deletedAt: null } } } },
+    /// [PATCH] 답변 읽음 추적용 — 가장 최근 답변의 createdAt만 1건 내려보냄
+    comments: {
+      where: { deletedAt: null },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    },
   } as const;
 
   /// [PATCH] KST(UTC+9) 기준 오늘 범위 — Railway 서버(UTC)와 무관하게 한국 시간 기준

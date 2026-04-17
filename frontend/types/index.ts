@@ -307,6 +307,8 @@ export interface OperationsCard extends FacilityRequestCard {
   opsReported?: boolean;
   qcReported?: boolean;
   _count?: { comments: number };
+  /// [PATCH] 답변 읽음 추적용 — 가장 최근 답변 1건 (createdAt만)
+  comments?: { createdAt: string }[];
 }
 
 // STEP 8: 운영팀 확인 큐 응답
