@@ -935,6 +935,14 @@ export async function getQcCompleted(
     createdBy: { select: { id: true, name: true } },
     assignedTo: { select: { id: true, name: true } },
     completedBy: { select: { id: true, name: true } },
+    /// [PATCH] 답변 하이라이트 — count + 최근 1건 createdAt (읽음 추적용)
+    _count: { select: { comments: { where: { deletedAt: null } } } },
+    comments: {
+      where: { deletedAt: null },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    },
   } as const;
 
   const doneByQc = await prisma.facilityRequest.findMany({
@@ -1099,6 +1107,13 @@ export async function getOperationsPending(
     operationsConfirmedBy: { select: { id: true, name: true } },
     /// [PATCH] 답변 하이라이트용 댓글 수
     _count: { select: { comments: { where: { deletedAt: null } } } },
+    /// [PATCH] 읽음 추적용 — 가장 최근 답변 createdAt 1건
+    comments: {
+      where: { deletedAt: null },
+      select: { createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+    },
   } as const;
 
   const [pending, recentClosed] = await Promise.all([
@@ -1169,6 +1184,13 @@ export async function getQcHistory(
         select: {
           comments: { where: { deletedAt: null } },
         },
+      },
+      /// [PATCH] 읽음 추적용 — 가장 최근 답변 createdAt 1건
+      comments: {
+        where: { deletedAt: null },
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
       },
     },
     orderBy: { updatedAt: 'desc' },

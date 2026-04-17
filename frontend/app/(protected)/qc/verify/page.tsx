@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQcCompleted } from '@/hooks/useQcQueue';
 import BranchFilter from '@/components/ui/BranchFilter';
@@ -25,19 +25,67 @@ function timeAgo(dateStr: string): string {
   return `${day}일 전`;
 }
 
+/// [PATCH] 답변 읽음 상태 — localStorage 기반 (페이지별 분리 키)
+const READ_STORAGE_KEY = 'qc_verify_answer_read_v1';
+
+function getReadMap(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(READ_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function markAnswerRead(requestId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const map = getReadMap();
+    map[requestId] = new Date().toISOString();
+    window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore */
+  }
+}
+
+function useUnreadAnswer(card: Pick<FacilityRequestCard, 'id' | '_count' | 'comments'>) {
+  const [readAt, setReadAt] = useState<string | null>(null);
+  useEffect(() => {
+    setReadAt(getReadMap()[card.id] ?? null);
+  }, [card.id]);
+
+  const hasAnswer = (card._count?.comments ?? 0) > 0;
+  const latestCommentAt = card.comments?.[0]?.createdAt ?? null;
+  const hasUnreadAnswer =
+    hasAnswer && !!latestCommentAt && (!readAt || readAt < latestCommentAt);
+
+  const markRead = () => {
+    if (hasUnreadAnswer) {
+      markAnswerRead(card.id);
+      setReadAt(new Date().toISOString());
+    }
+  };
+
+  return { hasUnreadAnswer, markRead };
+}
+
 // ================================================================
 // 카드
 // ================================================================
 
 function VerifyCard({ card }: { card: FacilityRequestCard }) {
   const router = useRouter();
-  /// [PATCH] 답변이 달린 카드 하이라이트
-  const hasAnswer = (card._count?.comments ?? 0) > 0;
+  /// [PATCH] 미읽음 답변 하이라이트 — 클릭 시 읽음 처리
+  const { hasUnreadAnswer, markRead } = useUnreadAnswer(card);
 
   return (
     <div
-      onClick={() => router.push(`/requests/${card.id}`)}
-      className={`bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5 ${hasAnswer ? 'card-answer-glow' : ''}`}
+      onClick={() => {
+        markRead();
+        router.push(`/requests/${card.id}`);
+      }}
+      className={`bg-white border border-gray-200 rounded-lg p-3.5 cursor-pointer hover:shadow-sm hover:border-gray-300 transition-all space-y-1.5 ${hasUnreadAnswer ? 'card-answer-glow' : ''}`}
     >
       {/* 1순위 메인: 지점 + 객실 */}
       <div className="flex items-start justify-between gap-2">
