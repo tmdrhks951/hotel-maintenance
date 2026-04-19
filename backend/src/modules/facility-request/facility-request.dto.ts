@@ -6,10 +6,10 @@ import { RequestCategory, Priority } from '@prisma/client';
 
 export interface CreateFacilityRequestDto {
   branchId: string;
-  /// STEP 12: 위치(Location) — 필수
-  locationId: string;
-  /// STEP 12: 객실 번호 (예: "205호") — 필수
-  roomNumber: string;
+  /// 위치(Location) — 객실 개념이 없는 지점(카와우소/국도빌딩 등)에서는 생략 가능
+  locationId?: string | null;
+  /// 객실 번호 (예: "205호") — 객실 개념이 없는 지점에서는 생략 가능
+  roomNumber?: string | null;
   category: RequestCategory;
   /// 한 줄 설명 — 운영팀 입력 최소화 원칙
   description: string;

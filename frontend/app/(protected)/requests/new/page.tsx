@@ -19,6 +19,13 @@ import type {
 import { REQUEST_CATEGORY_LABEL, LOCATION_TYPE_LABEL } from '@/types';
 
 // ================================================================
+// "객실정보 없음" 센티넬 — 카와우소/국도빌딩처럼 객실 개념이 없는 지점용
+// locationId 셀렉트에 실제 Location ID 대신 이 값이 저장되면 서버엔 null 전송
+// ================================================================
+
+const NO_ROOM_VALUE = '__NO_ROOM__';
+
+// ================================================================
 // 역할별 홈 경로
 // ================================================================
 
@@ -96,7 +103,13 @@ export default function NewFacilityRequestPage() {
   }, [branchId]);
 
   /// [PATCH START] 객실 선택 시 roomNumber + locationId 동시 설정
+  /// "객실정보 없음" 선택 시 locationId만 센티넬로 두고 roomNumber는 비움
   const handleRoomChange = (locId: string) => {
+    if (locId === NO_ROOM_VALUE) {
+      setLocationId(NO_ROOM_VALUE);
+      setRoomNumber('');
+      return;
+    }
     setLocationId(locId);
     const loc = locations?.find((l) => l.id === locId);
     setRoomNumber(loc?.name ?? '');
@@ -116,9 +129,10 @@ export default function NewFacilityRequestPage() {
 
   // ----------------------------------------------------------------
   // Duplicate check when branchId + locationId are both set
+  // "객실정보 없음" 상태에선 duplicate check 생략
   // ----------------------------------------------------------------
   useEffect(() => {
-    if (!branchId || !locationId) {
+    if (!branchId || !locationId || locationId === NO_ROOM_VALUE) {
       setDupResult(null);
       return;
     }
@@ -174,7 +188,7 @@ export default function NewFacilityRequestPage() {
     setError('');
 
     if (!branchId) { setError('지점을 선택해주세요'); return; }
-    /// [PATCH START] 객실 선택이 필수(이제 드롭다운), 위치는 선택 사항
+    /// [PATCH START] 객실 선택 필수 — 단 "객실정보 없음"(센티넬)도 유효한 선택
     if (!locationId) { setError('객실을 선택해주세요'); return; }
     /// [PATCH END]
     if (!category) { setError('카테고리를 선택해주세요'); return; }
@@ -191,8 +205,11 @@ export default function NewFacilityRequestPage() {
     fd.append('description', fullDescription);
     fd.append('category', category);
     fd.append('branchId', branchId);
-    fd.append('roomNumber', roomNumber.trim());
-    fd.append('locationId', locationId);
+    /// [PATCH] "객실정보 없음" 선택 시 locationId/roomNumber 전송하지 않음 → 서버는 null 처리
+    if (locationId !== NO_ROOM_VALUE) {
+      fd.append('locationId', locationId);
+      if (roomNumber.trim()) fd.append('roomNumber', roomNumber.trim());
+    }
     if (photo) fd.append('image', photo);
 
     try {
@@ -298,7 +315,14 @@ export default function NewFacilityRequestPage() {
               {locationOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>{opt.label}</option>
               ))}
+              {/* /// [PATCH] 객실 개념이 없는 지점(카와우소/국도빌딩 등)을 위한 옵션 */}
+              <option value={NO_ROOM_VALUE}>객실정보 없음</option>
             </select>
+            {locationId === NO_ROOM_VALUE && (
+              <p className="text-xs text-gray-500 mt-1">
+                객실 번호 없이 지점 단위로 등록됩니다
+              </p>
+            )}
           </div>
           {/* /// [PATCH END] */}
 

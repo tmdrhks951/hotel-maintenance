@@ -222,14 +222,7 @@ export async function createFacilityRequest(
 ) {
   assertBranchAccess(userRole, userPosition, userBranchIds, dto.branchId);
 
-  // STEP 12: 필수 필드 검증 — 지점/객실/위치/작업내용
-  if (!dto.locationId?.trim()) {
-    throw new AppError('위치를 선택해주세요', 400, true, 'LOCATION_REQUIRED');
-  }
-  if (!dto.roomNumber?.trim()) {
-    throw new AppError('객실 정보를 입력해주세요', 400, true, 'ROOM_REQUIRED');
-  }
-
+  // 지점은 필수. locationId/roomNumber는 객실 개념이 없는 지점(카와우소/국도빌딩 등)을 위해 선택.
   const branch = await prisma.branch.findFirst({
     where: { id: dto.branchId, deletedAt: null, isActive: true },
   });
@@ -237,16 +230,24 @@ export async function createFacilityRequest(
     throw new AppError('지점을 찾을 수 없습니다', 404, true, 'BRANCH_NOT_FOUND');
   }
 
-  const location = await prisma.location.findFirst({
-    where: { id: dto.locationId, branchId: dto.branchId, deletedAt: null },
-  });
-  if (!location) {
-    throw new AppError('해당 지점의 위치를 찾을 수 없습니다', 404, true, 'LOCATION_NOT_FOUND');
+  // locationId가 주어진 경우에만 존재 여부 검증
+  const locationIdInput = dto.locationId?.trim() || null;
+  if (locationIdInput) {
+    const location = await prisma.location.findFirst({
+      where: { id: locationIdInput, branchId: dto.branchId, deletedAt: null },
+    });
+    if (!location) {
+      throw new AppError('해당 지점의 위치를 찾을 수 없습니다', 404, true, 'LOCATION_NOT_FOUND');
+    }
   }
-  const roomNumber = dto.roomNumber.trim();
+
+  const roomNumber = dto.roomNumber?.trim() || null;
 
   const categoryLabel = CATEGORY_LABEL[dto.category] ?? dto.category;
-  const title = `${categoryLabel} — ${roomNumber}`;
+  // 객실정보 없음 케이스 → 제목은 지점명 + 카테고리로 구성 (roomNumber가 title에 들어갈 수 없으므로)
+  const title = roomNumber
+    ? `${categoryLabel} — ${roomNumber}`
+    : `${categoryLabel} — ${branch.name}`;
 
   const result = await prisma.$transaction(async (tx) => {
     const request = await tx.facilityRequest.create({
@@ -256,7 +257,7 @@ export async function createFacilityRequest(
         category: dto.category,
         status: 'REQUESTED',
         branchId: dto.branchId,
-        locationId: dto.locationId,
+        locationId: locationIdInput,
         roomNumber,
         createdById: userId,
       },

@@ -118,22 +118,14 @@ export async function createFacilityRequestHandler(
       description?: string;
     };
 
-    // STEP 12: 지점/객실/위치/작업내용 모두 필수
-    if (!branchId || !locationId || !roomNumber || !category || !description) {
+    // 지점/카테고리/작업내용 필수 — locationId/roomNumber는 객실 개념이 없는 지점을 위해 선택
+    if (!branchId || !category || !description) {
       res.status(400).json({
         success: false,
         error: {
           code: 'VALIDATION_ERROR',
-          message: '지점, 객실, 위치, 카테고리, 작업내용은 필수입니다',
+          message: '지점, 카테고리, 작업내용은 필수입니다',
         },
-      });
-      return;
-    }
-
-    if (roomNumber.trim().length === 0) {
-      res.status(400).json({
-        success: false,
-        error: { code: 'VALIDATION_ERROR', message: '객실 정보를 입력해주세요' },
       });
       return;
     }
@@ -164,8 +156,8 @@ export async function createFacilityRequestHandler(
       user.branchIds,
       {
         branchId,
-        locationId,
-        roomNumber: roomNumber.trim(),
+        locationId: locationId?.trim() || null,
+        roomNumber: roomNumber?.trim() || null,
         category: category as RequestCategory,
         description: description.trim(),
       },
