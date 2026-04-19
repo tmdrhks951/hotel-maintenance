@@ -6,9 +6,10 @@ import { useQcHistory, useToggleQcReport } from '@/hooks/useQcQueue';
 import { useAuthStore } from '@/stores/authStore';
 import BranchFilter from '@/components/ui/BranchFilter';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { REQUEST_CATEGORY_LABEL } from '@/types';
+import { REQUEST_CATEGORY_LABEL, REQUEST_STATUS_LABEL } from '@/types';
 import type { QcHistoryCard } from '@/types';
 import { groupByDateThenBranch } from '@/lib/groupCards';
+import { exportToCsv } from '@/lib/exportExcel';
 
 // ================================================================
 // 유틸
@@ -225,14 +226,51 @@ export default function QcHistoryPage() {
     user?.role === 'QC' &&
     (user?.position === 'TEAM_LEADER' || user?.position === 'DEPUTY_LEADER');
 
+  /// [PATCH] Excel 내보내기 — QC 팀장/부팀장 또는 ADMIN 에게만 노출
+  const canExport =
+    user?.role === 'ADMIN' ||
+    (user?.role === 'QC' &&
+      (user?.position === 'TEAM_LEADER' || user?.position === 'DEPUTY_LEADER'));
+
   const items = data ?? [];
+
+  function handleExport() {
+    const headers = ['제목', '카테고리', '상태', '지점', '객실', '완료자', '완료일', '보고여부', '답변수'];
+    const rows = items.map((item) => [
+      item.title,
+      REQUEST_CATEGORY_LABEL[item.category],
+      REQUEST_STATUS_LABEL[item.status],
+      item.branch.name,
+      item.roomNumber ?? '-',
+      item.completedBy?.name ?? '-',
+      formatDate(item.completedAt),
+      item.qcReported ? '보고' : '미보고',
+      String(item._count?.comments ?? 0),
+    ]);
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `QC작업이력_${today}`;
+    exportToCsv(filename, headers, rows);
+  }
 
   return (
     <div>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-gray-900">QC 작업 이력</h1>
-        <BranchFilter value={branchId} onChange={setBranchId} />
+        <div className="flex items-center gap-2">
+          <BranchFilter value={branchId} onChange={setBranchId} />
+          {canExport && (
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={items.length === 0}
+              className="px-3 py-1.5 border border-gray-300 text-sm font-medium text-gray-700 rounded hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="현재 필터 결과를 Excel(CSV)로 내보내기"
+            >
+              Excel 내보내기
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (
