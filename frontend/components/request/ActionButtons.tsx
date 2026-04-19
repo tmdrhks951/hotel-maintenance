@@ -260,6 +260,51 @@ export default function ActionButtons({ request, onRefresh }: Props) {
     });
   }
 
+  // ================================================================
+  // [RESTORE] 긴급 지정 / 해제
+  // master 브랜치 qc/page.tsx 에 있던 "🚨 긴급 처리 체크박스 + 긴급 사유"
+  // 섹션이 main 리팩토링(queue + ActionButtons 분해) 과정에서 누락되어
+  // 복원. 백엔드 API(qcReview — action 없으면 emergency/priority만 업데이트),
+  // 타입(QcReviewBody.isEmergency/emergencyReason), hook(useQcReview) 은
+  // 이미 완비되어 있어 UI 버튼만 연결하면 즉시 동작.
+  // ================================================================
+  function handleSetEmergency() {
+    setReasonText('');
+    setReasonModal({
+      title: '긴급 지정',
+      label: '긴급 사유를 입력하세요 (필수)',
+      onConfirm: (reason) => {
+        qcReview.mutate(
+          { isEmergency: true, emergencyReason: reason },
+          {
+            onSuccess: () => {
+              setReasonModal(null);
+              onRefresh();
+            },
+          },
+        );
+      },
+    });
+  }
+
+  function handleClearEmergency() {
+    setConfirmModal({
+      title: '긴급 해제',
+      message: '이 요청의 긴급 플래그를 해제하시겠습니까?',
+      onConfirm: () => {
+        qcReview.mutate(
+          { isEmergency: false },
+          {
+            onSuccess: () => {
+              setConfirmModal(null);
+              onRefresh();
+            },
+          },
+        );
+      },
+    });
+  }
+
   function handleCompleteSubmit() {
     if (!workAction || !workItem) return;
 
@@ -446,6 +491,44 @@ export default function ActionButtons({ request, onRefresh }: Props) {
         재오픈
       </button>,
     );
+  }
+
+  // [RESTORE] 긴급 지정 / 해제 버튼
+  // - 종료/운영확정 상태를 제외한 모든 활성 상태에서 노출
+  // - 권한: QC 또는 ADMIN
+  // - 이미 긴급이면 "긴급 해제", 아니면 "🚨 긴급 지정"을 표시
+  if (
+    status !== 'CLOSED' &&
+    status !== 'OPERATIONS_CONFIRMED' &&
+    (isQc || isAdmin)
+  ) {
+    if (!request.isEmergency) {
+      buttons.push(
+        <button
+          key="set-emergency"
+          type="button"
+          disabled={isPending}
+          className={BTN.danger}
+          onClick={handleSetEmergency}
+          title="긴급 요청으로 지정"
+        >
+          🚨 긴급 지정
+        </button>,
+      );
+    } else {
+      buttons.push(
+        <button
+          key="clear-emergency"
+          type="button"
+          disabled={isPending}
+          className={BTN.secondary}
+          onClick={handleClearEmergency}
+          title="긴급 플래그 해제"
+        >
+          긴급 해제
+        </button>,
+      );
+    }
   }
 
   if (buttons.length === 0) return null;
