@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import {
   useQcReview,
@@ -9,39 +9,13 @@ import {
   useCompleteWork,
   useReopenFacilityRequest,
 } from '@/hooks/useQcQueue';
-import Modal from '@/components/ui/Modal';
-import PhotoUpload from '@/components/ui/PhotoUpload';
-import type {
-  FacilityRequestDetail,
-  FacilityRequestStatus,
-  WorkAction,
-  RequestCategory,
-  Role,
-} from '@/types';
-import {
-  WORK_ACTIONS,
-  WORK_ACTION_ITEMS,
-  generateCompletionText,
-} from '@/types';
-
-// ================================================================
-// Helper: button style presets
-// ================================================================
-
-const BTN = {
-  primary:
-    'px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-  danger:
-    'px-4 py-2 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-  warning:
-    'px-4 py-2 text-sm font-medium rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-  secondary:
-    'px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-  success:
-    'px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-  teal:
-    'px-4 py-2 text-sm font-medium rounded-lg bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
-} as const;
+import type { FacilityRequestDetail, FacilityRequestStatus, Role } from '@/types';
+import { BTN } from './buttonStyles';
+import ConfirmModal, { type ConfirmModalConfig } from './modals/ConfirmModal';
+import ReasonModal, { type ReasonModalConfig } from './modals/ReasonModal';
+import NoteModal, { type NoteModalConfig } from './modals/NoteModal';
+import CompleteWorkModal from './modals/CompleteWorkModal';
+import ReceiveModal from './modals/ReceiveModal';
 
 // ================================================================
 // Props
@@ -64,32 +38,15 @@ export default function ActionButtons({ request, onRefresh }: Props) {
   const reopenRequest = useReopenFacilityRequest(request.id);
 
   // Modal states
-  const [confirmModal, setConfirmModal] = useState<{
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  } | null>(null);
+  const [confirmModal, setConfirmModal] = useState<ConfirmModalConfig | null>(null);
 
-  const [reasonModal, setReasonModal] = useState<{
-    title: string;
-    label: string;
-    onConfirm: (reason: string) => void;
-  } | null>(null);
+  const [reasonModal, setReasonModal] = useState<ReasonModalConfig | null>(null);
   const [reasonText, setReasonText] = useState('');
 
-  const [noteModal, setNoteModal] = useState<{
-    title: string;
-    onConfirm: (note: string) => void;
-  } | null>(null);
+  const [noteModal, setNoteModal] = useState<NoteModalConfig | null>(null);
   const [noteText, setNoteText] = useState('');
 
   const [showCompleteForm, setShowCompleteForm] = useState(false);
-
-  // Work completion form states
-  const [workAction, setWorkAction] = useState<WorkAction | ''>('');
-  const [workItem, setWorkItem] = useState('');
-  const [completionNote, setCompletionNote] = useState('');
-  const [afterPhoto, setAfterPhoto] = useState<File | null>(null);
 
   // STEP 12: QC RECEIVE form states
   const [showReceiveForm, setShowReceiveForm] = useState(false);
@@ -97,19 +54,6 @@ export default function ActionButtons({ request, onRefresh }: Props) {
   const [estimatedDuration, setEstimatedDuration] = useState<string>('');
   const [maintenanceRequired, setMaintenanceRequired] = useState<boolean | null>(null);
   const [receiveError, setReceiveError] = useState('');
-
-  // Available work items based on selected action + request category
-  const availableItems = useMemo(() => {
-    if (!workAction) return [];
-    const byCategory = WORK_ACTION_ITEMS[workAction as WorkAction];
-    return byCategory?.[request.category] ?? [];
-  }, [workAction, request.category]);
-
-  // Reset item when action changes
-  function handleActionChange(action: WorkAction | '') {
-    setWorkAction(action);
-    setWorkItem('');
-  }
 
   // ================================================================
   // Handlers
@@ -301,34 +245,6 @@ export default function ActionButtons({ request, onRefresh }: Props) {
             },
           },
         );
-      },
-    });
-  }
-
-  function handleCompleteSubmit() {
-    if (!workAction || !workItem) return;
-
-    const generatedText = generateCompletionText(
-      request.category,
-      workAction as WorkAction,
-      workItem,
-    );
-
-    const fd = new FormData();
-    fd.append('workAction', workAction);
-    fd.append('workItem', workItem);
-    fd.append('generatedText', generatedText);
-    if (completionNote.trim()) fd.append('note', completionNote.trim());
-    if (afterPhoto) fd.append('image', afterPhoto);
-
-    completeWork.mutate(fd, {
-      onSuccess: () => {
-        setShowCompleteForm(false);
-        setWorkAction('');
-        setWorkItem('');
-        setCompletionNote('');
-        setAfterPhoto(null);
-        onRefresh();
       },
     });
   }
@@ -539,288 +455,53 @@ export default function ActionButtons({ request, onRefresh }: Props) {
       <div className="flex flex-wrap gap-2">{buttons}</div>
 
       {/* Simple confirm modal */}
-      <Modal
-        open={!!confirmModal}
+      <ConfirmModal
+        config={confirmModal}
         onClose={() => setConfirmModal(null)}
-        title={confirmModal?.title ?? ''}
-      >
-        <p className="text-sm text-gray-700 mb-4">{confirmModal?.message}</p>
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            className={BTN.secondary}
-            onClick={() => setConfirmModal(null)}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className={BTN.primary}
-            disabled={isPending}
-            onClick={confirmModal?.onConfirm}
-          >
-            {isPending ? '처리 중...' : '확인'}
-          </button>
-        </div>
-      </Modal>
+        isPending={isPending}
+      />
 
       {/* Reason input modal */}
-      <Modal
-        open={!!reasonModal}
+      <ReasonModal
+        config={reasonModal}
         onClose={() => setReasonModal(null)}
-        title={reasonModal?.title ?? ''}
-      >
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {reasonModal?.label}
-        </label>
-        <textarea
-          value={reasonText}
-          onChange={(e) => setReasonText(e.target.value)}
-          rows={3}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none resize-none mb-4"
-        />
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            className={BTN.secondary}
-            onClick={() => setReasonModal(null)}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className={BTN.primary}
-            disabled={!reasonText.trim() || isPending}
-            onClick={() => reasonModal?.onConfirm(reasonText.trim())}
-          >
-            {isPending ? '처리 중...' : '확인'}
-          </button>
-        </div>
-      </Modal>
+        isPending={isPending}
+        value={reasonText}
+        onChange={setReasonText}
+      />
 
       {/* Note (optional) modal */}
-      <Modal
-        open={!!noteModal}
+      <NoteModal
+        config={noteModal}
         onClose={() => setNoteModal(null)}
-        title={noteModal?.title ?? ''}
-      >
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          메모 (선택사항)
-        </label>
-        <textarea
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          rows={3}
-          placeholder="추가 메모를 입력하세요..."
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none resize-none mb-4"
-        />
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            className={BTN.secondary}
-            onClick={() => setNoteModal(null)}
-          >
-            취소
-          </button>
-          <button
-            type="button"
-            className={BTN.primary}
-            disabled={isPending}
-            onClick={() => noteModal?.onConfirm(noteText.trim())}
-          >
-            {isPending ? '처리 중...' : '확인'}
-          </button>
-        </div>
-      </Modal>
+        isPending={isPending}
+        value={noteText}
+        onChange={setNoteText}
+      />
 
       {/* Work completion form modal */}
-      <Modal
+      <CompleteWorkModal
         open={showCompleteForm}
         onClose={() => setShowCompleteForm(false)}
-        title="작업 완료 등록"
-        wide
-      >
-        <div className="space-y-4">
-          {/* Work Action */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              작업 유형
-            </label>
-            <select
-              value={workAction}
-              onChange={(e) => handleActionChange(e.target.value as WorkAction | '')}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none"
-            >
-              <option value="">선택하세요</option>
-              {WORK_ACTIONS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Work Item */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              작업 항목
-            </label>
-            <select
-              value={workItem}
-              onChange={(e) => setWorkItem(e.target.value)}
-              disabled={!workAction}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">선택하세요</option>
-              {availableItems.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Preview generated text */}
-          {workAction && workItem && (
-            <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-600">
-              {generateCompletionText(request.category, workAction as WorkAction, workItem)}
-            </div>
-          )}
-
-          {/* Note */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              비고 (선택사항)
-            </label>
-            <textarea
-              value={completionNote}
-              onChange={(e) => setCompletionNote(e.target.value)}
-              rows={2}
-              placeholder="추가 메모를 입력하세요..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none resize-none"
-            />
-          </div>
-
-          {/* After photo */}
-          <PhotoUpload
-            value={afterPhoto}
-            onChange={setAfterPhoto}
-            label="수리 후 사진/영상 (선택사항)"
-          />
-
-          {/* Submit */}
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              className={BTN.secondary}
-              onClick={() => setShowCompleteForm(false)}
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              className={BTN.teal}
-              disabled={!workAction || !workItem || completeWork.isPending}
-              onClick={handleCompleteSubmit}
-            >
-              {completeWork.isPending ? '등록 중...' : '작업 완료 등록'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        request={request}
+        completeWork={completeWork}
+        onRefresh={onRefresh}
+      />
 
       {/* STEP 12: QC 수령 폼 모달 */}
-      <Modal
+      <ReceiveModal
         open={showReceiveForm}
         onClose={() => setShowReceiveForm(false)}
-        title="QC 수령"
-      >
-        <div className="space-y-4">
-          {receiveError && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {receiveError}
-            </div>
-          )}
-
-          {/* QC 방문 예정일시 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              QC 방문 예정일시 <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="datetime-local"
-              value={qcVisitDate}
-              onChange={(e) => setQcVisitDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none"
-            />
-          </div>
-
-          {/* 예상 소요시간 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              예상 소요시간 (분) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              value={estimatedDuration}
-              onChange={(e) => setEstimatedDuration(e.target.value)}
-              placeholder="예: 30"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none"
-            />
-          </div>
-
-          {/* 정비 필요 여부 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              정비 필요 여부 <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setMaintenanceRequired(true)}
-                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                  maintenanceRequired === true
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                정비 필요
-              </button>
-              <button
-                type="button"
-                onClick={() => setMaintenanceRequired(false)}
-                className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                  maintenanceRequired === false
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                정비 불필요
-              </button>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              className={BTN.secondary}
-              onClick={() => setShowReceiveForm(false)}
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              className={BTN.primary}
-              disabled={qcReview.isPending}
-              onClick={handleReceiveSubmit}
-            >
-              {qcReview.isPending ? '처리 중...' : '수령 확인'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        error={receiveError}
+        qcVisitDate={qcVisitDate}
+        onQcVisitDateChange={setQcVisitDate}
+        estimatedDuration={estimatedDuration}
+        onEstimatedDurationChange={setEstimatedDuration}
+        maintenanceRequired={maintenanceRequired}
+        onMaintenanceRequiredChange={setMaintenanceRequired}
+        isPending={qcReview.isPending}
+        onSubmit={handleReceiveSubmit}
+      />
     </>
   );
 }
