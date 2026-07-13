@@ -38,4 +38,14 @@ if (!parsed.success) {
   process.exit(1);
 }
 
+// 프로덕션 안전장치 — 로컬 기본값으로 조용히 기동하는 사고 방지
+if (parsed.data.NODE_ENV === 'production') {
+  const requiredInProd = ['DATABASE_URL', 'CORS_ORIGIN'] as const;
+  const missing = requiredInProd.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    console.error(`❌ 프로덕션 필수 환경변수 누락: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 export const env = parsed.data;

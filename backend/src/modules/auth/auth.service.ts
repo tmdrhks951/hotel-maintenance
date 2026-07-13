@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { env } from '@/config/env';
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
 import { hashPassword, verifyPassword } from '@/common/utils/password.util';
@@ -338,11 +339,15 @@ export async function sendCode(phone: string) {
   const code = phoneService.generateCode();
   await phoneService.storeCode(phone, code);
 
-  // TODO: 실제 SMS 발송 연동
-  // SMS 연동 전까지는 응답에 코드 포함 (프론트에서 자동입력)
-  console.log(`📱 인증코드 → ${phone}: ${code}`);
+  // TODO: 실제 SMS 발송 연동 (알리고/NHN Cloud 등)
+  // 보안: 프로덕션에서는 절대 응답에 코드를 포함하지 않는다.
+  // 개발 환경에서만 코드 반환 (프론트 자동입력용) + 콘솔 출력
+  if (env.NODE_ENV !== 'production') {
+    console.log(`📱 [DEV] 인증코드 → ${phone}: ${code}`);
+    return { message: '인증코드가 발송되었습니다', code };
+  }
 
-  return { message: '인증코드가 발송되었습니다', code };
+  return { message: '인증코드가 발송되었습니다' };
 }
 
 // ================================================================

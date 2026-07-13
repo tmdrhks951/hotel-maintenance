@@ -1,6 +1,5 @@
 /// [AUTH STEP ADD — 신규 파일]
 import { getRedisClient } from '@/config/redis';
-import { AppError } from '@/common/errors/AppError';
 
 // ================================================================
 // Redis Key 네이밍
@@ -20,20 +19,55 @@ export function generateCode(): string {
 }
 
 // ================================================================
-// Redis 사용 가능 확인
+// 저장소 추상화 — Redis 우선, 없으면 인메모리 폴백
+// 인메모리 폴백은 단일 인스턴스 배포에서만 유효 (다중 인스턴스는 Redis 필수)
 // ================================================================
 
-function requireRedis() {
-  const redis = getRedisClient();
-  if (!redis) {
-    throw new AppError(
-      '인증 서비스가 일시적으로 사용 불가합니다. 잠시 후 다시 시도해주세요',
-      503,
-      true,
-      'REDIS_UNAVAILABLE',
-    );
+const memoryStore = new Map<string, { value: string; expiresAt: number }>();
+
+function memoryGet(key: string): string | null {
+  const entry = memoryStore.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    memoryStore.delete(key);
+    return null;
   }
-  return redis;
+  return entry.value;
+}
+
+function memorySet(key: string, value: string, ttlSeconds: number): void {
+  memoryStore.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  // 만료 항목 청소 (호출 시점 기준)
+  if (memoryStore.size > 1000) {
+    const now = Date.now();
+    for (const [k, v] of memoryStore) {
+      if (now > v.expiresAt) memoryStore.delete(k);
+    }
+  }
+}
+
+async function storeGet(key: string): Promise<string | null> {
+  const redis = getRedisClient();
+  if (redis) return redis.get(key);
+  return memoryGet(key);
+}
+
+async function storeSet(key: string, value: string, ttlSeconds: number): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.set(key, value, 'EX', ttlSeconds);
+    return;
+  }
+  memorySet(key, value, ttlSeconds);
+}
+
+async function storeDel(key: string): Promise<void> {
+  const redis = getRedisClient();
+  if (redis) {
+    await redis.del(key);
+    return;
+  }
+  memoryStore.delete(key);
 }
 
 // ================================================================
@@ -41,8 +75,7 @@ function requireRedis() {
 // ================================================================
 
 export async function storeCode(phone: string, code: string): Promise<void> {
-  const redis = requireRedis();
-  await redis.set(`${CODE_PREFIX}${phone}`, code, 'EX', CODE_TTL);
+  await storeSet(`${CODE_PREFIX}${phone}`, code, CODE_TTL);
 }
 
 // ================================================================
@@ -50,14 +83,12 @@ export async function storeCode(phone: string, code: string): Promise<void> {
 // ================================================================
 
 export async function verifyCode(phone: string, code: string): Promise<boolean> {
-  const redis = requireRedis();
-
-  const stored = await redis.get(`${CODE_PREFIX}${phone}`);
+  const stored = await storeGet(`${CODE_PREFIX}${phone}`);
   if (!stored || stored !== code) return false;
 
   // 인증 성공: 코드 삭제 + 인증 완료 플래그 설정
-  await redis.del(`${CODE_PREFIX}${phone}`);
-  await redis.set(`${VERIFIED_PREFIX}${phone}`, '1', 'EX', VERIFIED_TTL);
+  await storeDel(`${CODE_PREFIX}${phone}`);
+  await storeSet(`${VERIFIED_PREFIX}${phone}`, '1', VERIFIED_TTL);
 
   return true;
 }
@@ -67,8 +98,7 @@ export async function verifyCode(phone: string, code: string): Promise<boolean> 
 // ================================================================
 
 export async function isVerified(phone: string): Promise<boolean> {
-  const redis = requireRedis();
-  const val = await redis.get(`${VERIFIED_PREFIX}${phone}`);
+  const val = await storeGet(`${VERIFIED_PREFIX}${phone}`);
   return val === '1';
 }
 
@@ -77,6 +107,5 @@ export async function isVerified(phone: string): Promise<boolean> {
 // ================================================================
 
 export async function consumeVerified(phone: string): Promise<void> {
-  const redis = requireRedis();
-  await redis.del(`${VERIFIED_PREFIX}${phone}`);
+  await storeDel(`${VERIFIED_PREFIX}${phone}`);
 }

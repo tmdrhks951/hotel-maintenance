@@ -50,6 +50,18 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
+// 역할별 접근 가능 경로 prefix — 미허용 경로 진입 시 역할 홈으로 리다이렉트
+const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
+  { prefix: '/admin', roles: ['ADMIN'] },
+  { prefix: '/qc', roles: ['QC', 'ADMIN'] },
+  { prefix: '/operations', roles: ['OPERATIONS', 'ADMIN'] },
+  { prefix: '/vendor', roles: ['VENDOR', 'ADMIN'] },
+];
+
+function roleHome(role: Role): string {
+  return NAV_BY_ROLE[role]?.[0]?.href ?? '/login';
+}
+
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -87,8 +99,27 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     }
   }, [hydrated, isLoading, isAuthenticated, authUser, appUser, setUser, router]);
 
+  // 3) 역할 기반 라우트 가드 — 미허용 경로 진입 시 역할 홈으로
+  useEffect(() => {
+    if (!hydrated || isLoading || !isAuthenticated || !authUser) return;
+    const guard = ROUTE_GUARDS.find((g) => pathname.startsWith(g.prefix));
+    if (guard && !guard.roles.includes(authUser.role)) {
+      router.replace(roleHome(authUser.role));
+    }
+  }, [hydrated, isLoading, isAuthenticated, authUser, pathname, router]);
+
   // 로딩 / 미인증 중에는 스피너 표시
   if (!hydrated || isLoading || !isAuthenticated || !authUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  // 리다이렉트 대기 중 보호 콘텐츠가 잠깐 렌더링되지 않도록 차단
+  const activeGuard = ROUTE_GUARDS.find((g) => pathname.startsWith(g.prefix));
+  if (activeGuard && !activeGuard.roles.includes(authUser.role)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />

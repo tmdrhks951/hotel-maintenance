@@ -62,12 +62,54 @@ function FindIdForm() {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  // 전화번호 인증 — 백엔드 find-login-id가 인증 완료를 요구함
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+
+  async function handleSendCode() {
+    setError('');
+    setSendingCode(true);
+    try {
+      const { data } = await apiClient.post('/auth/send-code', { phone });
+      setCodeSent(true);
+      // 개발 환경: 응답에 코드가 포함되면 자동입력
+      if (data.data?.code) setCode(data.data.code);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg ?? '인증코드 발송에 실패했습니다');
+    } finally {
+      setSendingCode(false);
+    }
+  }
+
+  async function handleVerifyCode() {
+    setError('');
+    setVerifying(true);
+    try {
+      await apiClient.post('/auth/verify-code', { phone, code });
+      setPhoneVerified(true);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg ?? '인증코드가 올바르지 않습니다');
+    } finally {
+      setVerifying(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setResult(null);
-    setLoading(true);
 
+    if (!phoneVerified) {
+      setError('전화번호 인증을 먼저 완료해주세요');
+      return;
+    }
+
+    setLoading(true);
     try {
       const { data } = await apiClient.post('/auth/find-login-id', {
         name, department, position, phone,
@@ -76,6 +118,10 @@ function FindIdForm() {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg ?? '일치하는 계정을 찾을 수 없습니다');
+      // 인증 상태가 소비되었을 수 있으므로 재인증 유도
+      setPhoneVerified(false);
+      setCodeSent(false);
+      setCode('');
     } finally {
       setLoading(false);
     }
@@ -119,15 +165,53 @@ function FindIdForm() {
       </Field>
 
       <Field label="전화번호">
-        <input
-          type="tel"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          required
-          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="010-0000-0000"
-        />
+        <div className="flex gap-1.5">
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => { setPhone(e.target.value); setPhoneVerified(false); setCodeSent(false); setCode(''); }}
+            required
+            disabled={phoneVerified}
+            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            placeholder="010-0000-0000"
+          />
+          <button
+            type="button"
+            onClick={handleSendCode}
+            disabled={sendingCode || !phone || phoneVerified}
+            className="px-3 py-2 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50 whitespace-nowrap"
+          >
+            {phoneVerified ? '인증 완료' : sendingCode ? '발송 중' : codeSent ? '재발송' : '인증코드 발송'}
+          </button>
+        </div>
       </Field>
+
+      {codeSent && !phoneVerified && (
+        <Field label="인증코드">
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              maxLength={6}
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="6자리 입력"
+            />
+            <button
+              type="button"
+              onClick={handleVerifyCode}
+              disabled={verifying || code.length !== 6}
+              className="px-3 py-2 text-xs font-medium bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              {verifying ? '확인 중' : '확인'}
+            </button>
+          </div>
+        </Field>
+      )}
+
+      {phoneVerified && !result && (
+        <p className="text-xs text-green-600">✅ 전화번호 인증이 완료되었습니다</p>
+      )}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
@@ -140,7 +224,7 @@ function FindIdForm() {
 
       <button
         type="submit"
-        disabled={loading || !name || !phone}
+        disabled={loading || !name || !phone || !phoneVerified}
         className="w-full bg-blue-600 text-white text-sm font-medium py-2.5 rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? '조회 중...' : '아이디 찾기'}

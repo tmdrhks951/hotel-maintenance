@@ -149,6 +149,9 @@ export async function generateScheduledRequests() {
     const shouldGenerate = checkShouldGenerate(schedule.recurrence, schedule.recurrenceDay, dayOfWeek, dayOfMonth);
     if (!shouldGenerate) continue;
 
+    // 설정된 생성 시각(HH:mm) 이전이면 스킵 — 다음 주기 실행에서 생성됨
+    if (!isPastRecurrenceTime(schedule.recurrenceTime, now)) continue;
+
     // FacilityRequest 자동 생성
     await prisma.$transaction(async (tx) => {
       await tx.facilityRequest.create({
@@ -178,6 +181,13 @@ export async function generateScheduledRequests() {
 // ================================================================
 // Helpers
 // ================================================================
+
+function isPastRecurrenceTime(recurrenceTime: string, now: Date): boolean {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(recurrenceTime);
+  if (!match) return true; // 형식이 잘못된 값은 시각 조건 없이 생성
+  const minutesOfDay = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  return now.getHours() * 60 + now.getMinutes() >= minutesOfDay;
+}
 
 function checkShouldGenerate(
   recurrence: RecurrenceType,

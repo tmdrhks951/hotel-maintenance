@@ -287,7 +287,7 @@ export default function SignupPage() {
           <div className="text-4xl mb-4">✅</div>
           <h2 className="text-lg font-bold text-gray-900 mb-2">회원가입 완료</h2>
           <p className="text-sm text-gray-500 mb-1">
-            <span className="font-medium text-blue-600">{loginIdPrefix}@urbanhost.co.kr</span> 으로 가입되었습니다.
+            아이디 <span className="font-medium text-blue-600">{loginIdPrefix}</span> 로 가입 신청되었습니다.
           </p>
           <p className="text-sm text-gray-400 mb-6">관리자 승인 후 로그인하실 수 있습니다.</p>
           <Link

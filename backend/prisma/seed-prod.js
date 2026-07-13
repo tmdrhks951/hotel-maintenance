@@ -1,88 +1,64 @@
 // Production seed — plain JS, no ts-node needed
+//
+// 안전 원칙:
+//  1. 어떤 데이터도 삭제하지 않는다 (파괴적 로직 금지)
+//  2. 계정/비밀번호를 코드에 하드코딩하지 않는다 — 관리자 계정은 환경변수로만 생성
+//  3. 모든 작업은 멱등(idempotent) — 이미 존재하면 건너뜀
+require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
-async function main() {
-  // ================================================================
-  // 0. 기존 테스트 시설요청 정리 (구 URL 미디어 포함 — 1회성)
-  // ================================================================
-  const oldMedia = await prisma.media.findFirst({ where: { url: { startsWith: 'http' } } });
-  if (oldMedia) {
-    console.log('🔄 Cleaning old facility requests with broken media URLs...');
-    await prisma.media.deleteMany({});
-    await prisma.statusLog.deleteMany({});
-    await prisma.notification.deleteMany({});
-    await prisma.facilityRequest.deleteMany({});
-    console.log('✅ Old facility requests & media cleaned');
-  }
-
-  // ================================================================
-  // 1. Admin 계정
-  // ================================================================
-  const existing = await prisma.user.findFirst({ where: { email: 'admin@hotel.com' } });
-  if (!existing) {
-    const hash = await bcrypt.hash('Admin@1234!', 12);
-    await prisma.user.create({
-      data: {
-        email: 'admin@hotel.com', loginId: 'admin', passwordHash: hash,
-        name: '시스템 관리자', role: 'ADMIN', position: 'OTHER', isActive: true,
-      },
-    });
-    console.log('✅ Admin created');
-  } else {
-    console.log('✅ Admin already exists');
-  }
-
-  // ================================================================
-  // 1-2. 테스트 계정 생성 (6종)
-  // ================================================================
-  const testAccounts = [
-    { loginId: 'ops.leader', email: 'ops.leader@hotel.com', name: '운영팀장', role: 'OPERATIONS', position: 'TEAM_LEADER', department: 'OPERATIONS_1' },
-    { loginId: 'qc.leader', email: 'qc.leader@hotel.com', name: 'QC팀장', role: 'QC', position: 'TEAM_LEADER', department: 'QC_1' },
-    { loginId: 'ops.member', email: 'ops.member@hotel.com', name: '운영팀원', role: 'OPERATIONS', position: 'MEMBER', department: 'OPERATIONS_1' },
-    { loginId: 'qc.member', email: 'qc.member@hotel.com', name: 'QC팀원', role: 'QC', position: 'MEMBER', department: 'QC_1' },
-    { loginId: 'vendor', email: 'vendor@hotel.com', name: '외부업체', role: 'VENDOR', position: 'OTHER', department: 'NONE' },
-  ];
-
-  const testPwHash = await bcrypt.hash('Test@1234!', 12);
-  for (const acc of testAccounts) {
-    const exists = await prisma.user.findFirst({ where: { loginId: acc.loginId } });
-    if (!exists) {
-      await prisma.user.create({
-        data: {
-          loginId: acc.loginId, email: acc.email, passwordHash: testPwHash,
-          name: acc.name, role: acc.role, position: acc.position, department: acc.department,
-          status: 'APPROVED', isActive: true,
-        },
-      });
-      console.log(`✅ ${acc.name} (${acc.loginId}) created`);
-    }
-  }
-
-  // ================================================================
-  // 2. 지점 데이터 확인 — 이미 최신이면 스킵
-  // ================================================================
-  const marker = await prisma.branch.findFirst({ where: { code: 'GANGNAM' } });
-  if (marker) {
-    console.log('✅ Branches already up to date (v2). Skipping.');
+async function seedAdmin() {
+  // 이미 관리자 계정이 있으면 아무것도 하지 않음
+  const adminExists = await prisma.user.findFirst({
+    where: { role: 'ADMIN', deletedAt: null },
+  });
+  if (adminExists) {
+    console.log('✅ Admin account exists. Skipping admin seed.');
     return;
   }
 
-  // ================================================================
-  // 3. 기존 지점/위치 정리
-  // ================================================================
-  console.log('🔄 Cleaning old branch/location data...');
-  await prisma.user.updateMany({ where: { branchId: { not: null } }, data: { branchId: null, branchIds: [] } });
-  await prisma.location.deleteMany({});
-  await prisma.branch.updateMany({ data: { parentId: null } });
-  await prisma.branch.deleteMany({});
-  console.log('✅ Old data cleaned');
+  // 최초 부트스트랩: 환경변수로만 관리자 생성
+  const loginId = process.env.ADMIN_LOGIN_ID;
+  const email = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
 
-  // ================================================================
-  // 4. 신규 지점 생성 (20개) — 일반 표시 순서 기준 sortOrder
-  // ================================================================
+  if (!loginId || !email || !password) {
+    console.warn(
+      '⚠️  관리자 계정이 없습니다. 최초 1회 ADMIN_LOGIN_ID / ADMIN_EMAIL / ADMIN_PASSWORD 환경변수를 설정하고 재배포하세요.',
+    );
+    return;
+  }
+  if (password.length < 10) {
+    throw new Error('ADMIN_PASSWORD는 10자 이상이어야 합니다');
+  }
+
+  const hash = await bcrypt.hash(password, 12);
+  await prisma.user.create({
+    data: {
+      email,
+      loginId,
+      passwordHash: hash,
+      name: '시스템 관리자',
+      role: 'ADMIN',
+      position: 'OTHER',
+      status: 'APPROVED',
+      isActive: true,
+    },
+  });
+  console.log(`✅ Admin created (loginId: ${loginId}) — 생성 후 환경변수에서 ADMIN_PASSWORD를 제거하세요.`);
+}
+
+async function seedBranches() {
+  // 지점이 하나라도 있으면 기존 데이터를 절대 건드리지 않음
+  const branchCount = await prisma.branch.count();
+  if (branchCount > 0) {
+    console.log(`✅ Branches exist (${branchCount}). Skipping branch seed.`);
+    return;
+  }
+
   const branchDefs = [
     { name: '명동 1호점', code: 'MYEONGDONG1', sortOrder: 1 },
     { name: '명동 2호점', code: 'MYEONGDONG2', sortOrder: 2 },
@@ -108,14 +84,13 @@ async function main() {
 
   const map = {};
   for (const b of branchDefs) {
-    const r = await prisma.branch.create({ data: { name: b.name, code: b.code, sortOrder: b.sortOrder, isActive: true } });
+    const r = await prisma.branch.create({
+      data: { name: b.name, code: b.code, sortOrder: b.sortOrder, isActive: true },
+    });
     map[b.code] = r.id;
   }
   console.log(`✅ ${branchDefs.length} branches created`);
 
-  // ================================================================
-  // 5. 객실(Location) 생성 — 실제 운영 데이터
-  // ================================================================
   const branchRooms = {
     SADANG:      ['301','302','401','402','403','501','502','503','601','602','603','701','702','703'],
     KAWAUSO1:    [],
@@ -144,49 +119,28 @@ async function main() {
     const bid = map[code];
     if (!bid) continue;
 
-    if (Array.isArray(roomData)) {
-      for (const r of roomData) {
-        await prisma.location.create({
-          data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },
-        });
-        roomCount++;
-      }
-    } else {
-      for (const r of roomData.rooms) {
-        await prisma.location.create({
-          data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },
-        });
-        roomCount++;
-      }
-      for (const r of roomData.office) {
-        await prisma.location.create({
-          data: { name: `${r}호`, type: 'OFFICE', branchId: bid, isActive: true },
-        });
-        roomCount++;
-      }
+    const rooms = Array.isArray(roomData) ? roomData : roomData.rooms;
+    const offices = Array.isArray(roomData) ? [] : roomData.office;
+
+    for (const r of rooms) {
+      await prisma.location.create({
+        data: { name: `${r}호`, type: 'ROOM', branchId: bid, isActive: true },
+      });
+      roomCount++;
+    }
+    for (const r of offices) {
+      await prisma.location.create({
+        data: { name: `${r}호`, type: 'OFFICE', branchId: bid, isActive: true },
+      });
+      roomCount++;
     }
   }
-
   console.log(`✅ ${roomCount} rooms created`);
+}
 
-  // ================================================================
-  // 6. 팀원 계정에 담당 지점 연결 (명동 1호점)
-  // ================================================================
-  const myeongdong1Id = map['MYEONGDONG1'];
-  if (myeongdong1Id) {
-    const memberAccounts = ['ops.member', 'qc.member'];
-    for (const lid of memberAccounts) {
-      const u = await prisma.user.findFirst({ where: { loginId: lid } });
-      if (u && !u.branchId) {
-        await prisma.user.update({
-          where: { id: u.id },
-          data: { branchId: myeongdong1Id, branchIds: [myeongdong1Id] },
-        });
-        console.log(`✅ ${lid} → 명동 1호점 연결`);
-      }
-    }
-  }
-
+async function main() {
+  await seedAdmin();
+  await seedBranches();
   console.log('🎉 Production seed complete!');
 }
 

@@ -51,9 +51,13 @@ function formatRecurrence(s: RecurringSchedule): string {
 
 export default function SchedulesPage() {
   const user = useAuthStore((s) => s.user);
+  // 수정/삭제/수동생성: 팀장급 이상 (백엔드 teamLeaderOnly와 일치)
   const canEdit =
     user?.role === 'ADMIN' ||
     (!!user?.position && LEADER_POSITIONS.includes(user.position));
+  // 등록: QC·운영팀 전원 가능 (백엔드 POST /recurring-schedules와 일치)
+  const canCreate =
+    canEdit || user?.role === 'QC' || user?.role === 'OPERATIONS';
 
   const { data: schedules, isLoading } = useSchedules();
   const deleteMut = useDeleteSchedule();
@@ -92,8 +96,8 @@ export default function SchedulesPage() {
           <h1 className="text-lg font-bold text-gray-900">정기점검 스케줄</h1>
           <p className="text-xs text-gray-400 mt-0.5">반복 점검 일정 관리</p>
         </div>
-        {canEdit && (
-          <div className="flex gap-2">
+        <div className="flex gap-2">
+          {canEdit && (
             <button
               onClick={handleGenerate}
               disabled={generateMut.isPending}
@@ -101,14 +105,16 @@ export default function SchedulesPage() {
             >
               {generateMut.isPending ? '생성 중...' : '수동 생성'}
             </button>
+          )}
+          {canCreate && (
             <button
               onClick={() => { setShowForm(true); setEditTarget(null); setError(''); }}
               className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
             >
               새 스케줄
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">{error}</p>}

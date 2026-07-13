@@ -13,10 +13,12 @@ import { AppError } from '@/common/errors/AppError';
 export function authenticate(req: Request, _res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
 
-  // SSE 연결은 EventSource가 헤더를 설정할 수 없으므로 ?token= 쿼리 파라미터로 대체 허용
+  // SSE 연결은 EventSource가 헤더를 설정할 수 없으므로 ?token= 쿼리 파라미터로 대체 허용.
+  // 보안: 쿼리스트링 토큰은 SSE 스트림 엔드포인트에서만 허용 (로그/히스토리 노출 최소화)
+  const isSseStream = req.originalUrl.split('?')[0].endsWith('/notifications/stream');
   const token: string | null = authHeader?.startsWith('Bearer ')
     ? authHeader.slice(7)
-    : typeof req.query.token === 'string'
+    : isSseStream && typeof req.query.token === 'string'
     ? req.query.token
     : null;
 
