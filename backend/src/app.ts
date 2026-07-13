@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import { env } from '@/config/env';
 import { UPLOAD_DIR } from '@/config/multer';
 import routes from '@/routes/index';
@@ -34,6 +35,9 @@ export function createApp(): express.Application {
   // Body parsing
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  // Cookie parsing — refresh token httpOnly 쿠키용
+  app.use(cookieParser());
 
   // 업로드 파일 정적 서빙
   // URL: GET /uploads/:filename

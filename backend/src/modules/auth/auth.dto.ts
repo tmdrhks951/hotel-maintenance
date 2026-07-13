@@ -14,8 +14,9 @@ export const LoginDto = z.object({
   message: 'loginId 또는 email이 필요합니다',
 });
 
+// refreshToken은 httpOnly 쿠키로 전달되는 것이 기본 — body는 하위 호환용
 export const RefreshTokenDto = z.object({
-  refreshToken: z.string().min(1, 'refreshToken이 필요합니다'),
+  refreshToken: z.string().min(1).optional(),
 });
 
 export type LoginInput = z.infer<typeof LoginDto>;

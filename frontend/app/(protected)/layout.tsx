@@ -130,8 +130,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const navItems = NAV_BY_ROLE[authUser.role] ?? [];
 
   function handleLogout() {
-    const rt = localStorage.getItem('auth_refresh_token');
-    if (rt) apiClient.post('/auth/logout', { refreshToken: rt }).catch(() => {});
+    // refresh token은 httpOnly 쿠키 — 서버가 쿠키를 읽어 무효화하고 삭제한다
+    apiClient.post('/auth/logout', {}).catch(() => {});
     clearAuth();
     setUser(null);
     router.replace('/login');

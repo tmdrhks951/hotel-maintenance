@@ -2,10 +2,12 @@ import axios from 'axios';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
+// withCredentials: refresh token은 httpOnly 쿠키로 전달됨
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 // ================================================================
@@ -16,6 +18,7 @@ const refreshClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10_000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
 // ================================================================
@@ -50,6 +53,7 @@ apiClient.interceptors.request.use((config) => {
 
 // ================================================================
 // Response 인터셉터 — 401 시 토큰 갱신, 실패 시 로그아웃
+// refresh token은 httpOnly 쿠키가 자동 전송 (JS에서 접근 불가)
 // ================================================================
 
 apiClient.interceptors.response.use(
@@ -83,19 +87,11 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      const storedRefreshToken = localStorage.getItem('auth_refresh_token');
-      if (!storedRefreshToken) {
-        forceLogout();
-        return Promise.reject(error);
-      }
+      // 쿠키의 refresh token으로 갱신 — body 불필요
+      const { data } = await refreshClient.post('/auth/refresh', {});
 
-      const { data } = await refreshClient.post('/auth/refresh', {
-        refreshToken: storedRefreshToken,
-      });
-
-      const { accessToken, refreshToken } = data.data;
+      const { accessToken } = data.data;
       localStorage.setItem('auth_access_token', accessToken);
-      localStorage.setItem('auth_refresh_token', refreshToken);
 
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       onTokenRefreshed(accessToken);
@@ -113,7 +109,6 @@ apiClient.interceptors.response.use(
 function forceLogout() {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('auth_access_token');
-    localStorage.removeItem('auth_refresh_token');
     localStorage.removeItem('auth_user');
     window.location.href = '/login';
   }

@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { env } from '@/config/env';
+import { AppError } from '@/common/errors/AppError';
 import {
   LoginDto,
   RefreshTokenDto,
@@ -13,7 +15,43 @@ import {
 import * as authService from './auth.service';
 
 // ================================================================
-// 기존 핸들러 (변경 최소화)
+// refresh token httpOnly 쿠키 — XSS로부터 리프레시 토큰 보호
+// 프로덕션은 크로스 도메인(Vercel↔Railway)이므로 SameSite=None + Secure
+// ================================================================
+
+const REFRESH_COOKIE = 'refresh_token';
+const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30일 (JWT_REFRESH_EXPIRES_IN과 일치)
+
+function refreshCookieOptions() {
+  const isProd = env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? ('none' as const) : ('lax' as const),
+    path: '/api/v1/auth',
+    maxAge: REFRESH_COOKIE_MAX_AGE,
+  };
+}
+
+function setRefreshCookie(res: Response, token: string): void {
+  res.cookie(REFRESH_COOKIE, token, refreshCookieOptions());
+}
+
+function clearRefreshCookie(res: Response): void {
+  const { maxAge: _omit, ...opts } = refreshCookieOptions();
+  res.clearCookie(REFRESH_COOKIE, opts);
+}
+
+/** 쿠키 우선, body 하위 호환 */
+function extractRefreshToken(req: Request): string | null {
+  const fromCookie = (req.cookies as Record<string, string> | undefined)?.[REFRESH_COOKIE];
+  if (fromCookie) return fromCookie;
+  const input = RefreshTokenDto.parse(req.body ?? {});
+  return input.refreshToken ?? null;
+}
+
+// ================================================================
+// 기존 핸들러
 // ================================================================
 
 /// [AUTH STEP MODIFY START] — loginId/email 양쪽 지원
@@ -21,8 +59,10 @@ export async function loginHandler(req: Request, res: Response, next: NextFuncti
   try {
     const input = LoginDto.parse(req.body);
     const identifier = input.loginId || input.email || '';
-    const result = await authService.login(identifier, input.password);
+    const { refreshToken, ...result } = await authService.login(identifier, input.password);
 
+    // 리프레시 토큰은 httpOnly 쿠키로만 전달 (응답 body에서 제외)
+    setRefreshCookie(res, refreshToken);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
     next(err);
@@ -36,11 +76,16 @@ export async function refreshHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const input = RefreshTokenDto.parse(req.body);
-    const result = await authService.refresh(input.refreshToken);
+    const rawToken = extractRefreshToken(req);
+    if (!rawToken) {
+      throw new AppError('인증이 필요합니다. 다시 로그인해주세요', 401, true, 'TOKEN_MISSING');
+    }
+    const { refreshToken, ...result } = await authService.refresh(rawToken);
 
+    setRefreshCookie(res, refreshToken);
     res.status(200).json({ success: true, data: result });
   } catch (err) {
+    clearRefreshCookie(res);
     next(err);
   }
 }
@@ -51,9 +96,11 @@ export async function logoutHandler(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const input = RefreshTokenDto.parse(req.body);
-    await authService.logout(input.refreshToken);
-
+    const rawToken = extractRefreshToken(req);
+    if (rawToken) {
+      await authService.logout(rawToken).catch(() => { /* 이미 무효한 토큰이어도 로그아웃은 성공 처리 */ });
+    }
+    clearRefreshCookie(res);
     res.status(200).json({ success: true, message: '로그아웃 되었습니다' });
   } catch (err) {
     next(err);

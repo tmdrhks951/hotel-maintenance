@@ -134,7 +134,7 @@ export interface AuthUser {
 export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
-  refreshToken: string;
+  /// refresh token은 httpOnly 쿠키로 전달되므로 body에는 없음
 }
 
 // ----------------------------------------------------------------
