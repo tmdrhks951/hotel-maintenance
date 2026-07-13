@@ -23,6 +23,13 @@ const envSchema = z.object({
   MINIO_PUBLIC_URL: z.string().optional(),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
+  // SMS 발송 — none: 미연동(개발 모드에서만 인증 가능), aligo: 알리고 문자 API
+  SMS_PROVIDER: z.enum(['none', 'aligo']).default('none'),
+  ALIGO_API_KEY: z.string().optional(),
+  ALIGO_USER_ID: z.string().optional(),
+  /// 알리고에 사전 등록된 발신번호
+  SMS_SENDER: z.string().optional(),
+
   // JWT — access/refresh 시크릿은 반드시 서로 달라야 함
   JWT_ACCESS_SECRET: z
     .string()

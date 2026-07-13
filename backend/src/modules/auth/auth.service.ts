@@ -6,6 +6,7 @@ import { hashPassword, verifyPassword } from '@/common/utils/password.util';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '@/common/utils/jwt.util';
 /// [AUTH STEP ADD START]
 import * as phoneService from '@/modules/phone/phone.service';
+import * as smsService from '@/lib/sms';
 import type { SignupInput, FindLoginIdInput, RequestPasswordResetInput } from './auth.dto';
 /// [AUTH STEP ADD END]
 
@@ -337,15 +338,18 @@ export async function signup(dto: SignupInput) {
 
 export async function sendCode(phone: string) {
   const code = phoneService.generateCode();
-  await phoneService.storeCode(phone, code);
 
-  // TODO: 실제 SMS 발송 연동 (알리고/NHN Cloud 등)
+  // 개발 환경: 실제 발송 없이 코드를 응답에 포함 (프론트 자동입력용)
   // 보안: 프로덕션에서는 절대 응답에 코드를 포함하지 않는다.
-  // 개발 환경에서만 코드 반환 (프론트 자동입력용) + 콘솔 출력
   if (env.NODE_ENV !== 'production') {
+    await phoneService.storeCode(phone, code);
     console.log(`📱 [DEV] 인증코드 → ${phone}: ${code}`);
     return { message: '인증코드가 발송되었습니다', code };
   }
+
+  // 프로덕션: SMS 발송 성공 시에만 코드 저장 (발송 실패 시 명확한 에러)
+  await smsService.sendSms(phone, `[호텔 시설관리] 인증번호 [${code}]를 입력해주세요.`);
+  await phoneService.storeCode(phone, code);
 
   return { message: '인증코드가 발송되었습니다' };
 }
