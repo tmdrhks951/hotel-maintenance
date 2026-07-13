@@ -2,6 +2,7 @@ import multer from 'multer';
 import path from 'path';
 import { randomBytes } from 'crypto';
 import fs from 'fs';
+import { env } from './env';
 
 // ================================================================
 // 로컬 디스크 스토리지
@@ -25,14 +26,19 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 // eslint-disable-next-line no-console
 console.log(`[multer] UPLOAD_DIR = ${UPLOAD_DIR}`);
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const unique = `${Date.now()}-${randomBytes(8).toString('hex')}`;
-    cb(null, `${unique}${ext}`);
-  },
-});
+// STORAGE_DRIVER=minio: 버퍼로 받아 storage.ts가 오브젝트 스토리지에 업로드
+// STORAGE_DRIVER=local: 디스크에 바로 저장 (기존 동작)
+const storage =
+  env.STORAGE_DRIVER === 'minio'
+    ? multer.memoryStorage()
+    : multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+        filename: (_req, file, cb) => {
+          const ext = path.extname(file.originalname).toLowerCase();
+          const unique = `${Date.now()}-${randomBytes(8).toString('hex')}`;
+          cb(null, `${unique}${ext}`);
+        },
+      });
 
 // 이미지 + 영상 (최대 5초 → 파일 크기로 제한) 모두 허용
 const ALLOWED_MIMES = [

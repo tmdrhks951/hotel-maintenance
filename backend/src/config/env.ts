@@ -10,11 +10,17 @@ const envSchema = z.object({
     .string()
     .default('postgresql://postgres:password@localhost:5432/hotel_maintenance'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  // 파일 저장 드라이버 — local: 디스크(UPLOAD_DIR), minio: S3 호환 오브젝트 스토리지(MinIO/S3/R2)
+  STORAGE_DRIVER: z.enum(['local', 'minio']).default('local'),
   MINIO_ENDPOINT: z.string().default('localhost'),
   MINIO_PORT: z.string().default('9000'),
+  MINIO_USE_SSL: z.string().default('false'),
   MINIO_ACCESS_KEY: z.string().default('minioadmin'),
   MINIO_SECRET_KEY: z.string().default('minioadmin'),
   MINIO_BUCKET: z.string().default('hotel-files'),
+  /// 오브젝트 공개 URL 베이스 (CDN/R2 퍼블릭 도메인 등). 미설정 시 endpoint 기반 생성
+  MINIO_PUBLIC_URL: z.string().optional(),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
   // JWT — access/refresh 시크릿은 반드시 서로 달라야 함

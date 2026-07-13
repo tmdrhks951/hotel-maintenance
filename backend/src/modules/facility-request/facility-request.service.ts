@@ -1,6 +1,7 @@
 import { FacilityRequestStatus } from '@prisma/client';
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
+import { storeUploadedFile } from '@/lib/storage';
 import { fanOut, getQcUserIds, getNotificationRecipients } from '../notification/notification.service';
 import type {
   CreateFacilityRequestDto,
@@ -249,6 +250,9 @@ export async function createFacilityRequest(
     ? `${categoryLabel} — ${roomNumber}`
     : `${categoryLabel} — ${branch.name}`;
 
+  // 파일 저장 (오브젝트 스토리지 업로드는 외부 IO — 트랜잭션 밖에서 수행)
+  const mediaUrl = file ? await storeUploadedFile(file) : null;
+
   const result = await prisma.$transaction(async (tx) => {
     const request = await tx.facilityRequest.create({
       data: {
@@ -288,13 +292,13 @@ export async function createFacilityRequest(
     });
 
     let media = null;
-    if (file) {
+    if (file && mediaUrl) {
       const isVideo = file.mimetype.startsWith('video/');
       media = await tx.media.create({
         data: {
           type: isVideo ? 'VIDEO' : 'IMAGE',
           phase: 'BEFORE',
-          url: `/uploads/${file.filename}`,
+          url: mediaUrl,
           filename: file.originalname,
           size: file.size,
           requestId: request.id,
@@ -837,6 +841,9 @@ export async function completeWork(
     ? `${dto.generatedText} — ${dto.note.trim()}`
     : dto.generatedText;
 
+  // 파일 저장 (오브젝트 스토리지 업로드는 외부 IO — 트랜잭션 밖에서 수행)
+  const mediaUrl = await storeUploadedFile(file);
+
   const updated = await prisma.$transaction(async (tx) => {
     // AFTER 사진/영상 저장
     const isVideo = file.mimetype.startsWith('video/');
@@ -844,7 +851,7 @@ export async function completeWork(
       data: {
         type: isVideo ? 'VIDEO' : 'IMAGE',
         phase: 'AFTER',
-        url: `/uploads/${file.filename}`,
+        url: mediaUrl,
         filename: file.originalname,
         size: file.size,
         requestId,
