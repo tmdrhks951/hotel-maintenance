@@ -1,7 +1,50 @@
 import { prisma } from '@/config/prisma';
 import { AppError } from '@/common/errors/AppError';
-import { hashPassword } from '@/common/utils/password.util';
+import { hashPassword, verifyPassword } from '@/common/utils/password.util';
 import type { CreateUserDto, UpdateUserDto, ListUsersQuery } from './user.dto';
+
+// ================================================================
+// changeMyPassword — 로그인한 사용자의 본인 비밀번호 변경
+// ================================================================
+
+export async function changeMyPassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) {
+  if (!newPassword || newPassword.length < 8) {
+    throw new AppError('새 비밀번호는 8자 이상이어야 합니다', 400, true, 'VALIDATION_ERROR');
+  }
+  if (currentPassword === newPassword) {
+    throw new AppError('새 비밀번호가 기존 비밀번호와 동일합니다', 400, true, 'VALIDATION_ERROR');
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { id: true, passwordHash: true, isActive: true },
+  });
+  if (!user) {
+    throw new AppError('사용자를 찾을 수 없습니다', 404, true, 'USER_NOT_FOUND');
+  }
+
+  const ok = await verifyPassword(currentPassword, user.passwordHash);
+  if (!ok) {
+    throw new AppError('현재 비밀번호가 올바르지 않습니다', 400, true, 'INVALID_CURRENT_PASSWORD');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+
+  // 비밀번호 변경 + 기존 모든 리프레시 토큰 폐기 (다른 기기 세션 강제 로그아웃)
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+    prisma.refreshToken.updateMany({
+      where: { userId: user.id, isRevoked: false },
+      data: { isRevoked: true },
+    }),
+  ]);
+
+  return { message: '비밀번호가 변경되었습니다' };
+}
 
 // ================================================================
 // getMe

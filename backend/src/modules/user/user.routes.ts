@@ -4,6 +4,7 @@ import { authenticate } from '@/common/middleware/authenticate';
 import { authorize } from '@/common/middleware/authorize';
 import {
   getMeHandler,
+  changeMyPasswordHandler,
   createUserHandler,
   listUsersHandler,
   getUserByIdHandler,
@@ -19,6 +20,9 @@ const router = Router();
 
 // GET /api/v1/users/me — 본인 정보 (인증만 필요)
 router.get('/me', authenticate, getMeHandler);
+
+// PATCH /api/v1/users/me/password — 본인 비밀번호 변경 (인증만 필요)
+router.patch('/me/password', authenticate, changeMyPasswordHandler);
 
 // GET /api/v1/users/assignable — STEP 6: 담당자 후보 조회 (QC/ADMIN)
 // /me, /assignable 를 /:id 앞에 배치

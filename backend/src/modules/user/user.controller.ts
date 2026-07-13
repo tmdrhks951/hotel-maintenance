@@ -23,6 +23,35 @@ export async function getMeHandler(
   }
 }
 
+// PATCH /api/v1/users/me/password — 본인 비밀번호 변경
+export async function changeMyPasswordHandler(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(new AppError('인증이 필요합니다', 401, true, 'UNAUTHORIZED'));
+      return;
+    }
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string;
+      newPassword?: string;
+    };
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'currentPassword와 newPassword는 필수입니다' },
+      });
+      return;
+    }
+    const result = await userService.changeMyPassword(req.user.id, currentPassword, newPassword);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // POST /api/v1/users
 export async function createUserHandler(
   req: Request,

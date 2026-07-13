@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import NotificationBell from '@/components/notification/NotificationBell';
 import QuickCreateFab from '@/components/ui/QuickCreateFab';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 import { useSse } from '@/hooks/useSse';
 import type { ApiResponse, AuthUser, Role } from '@/types';
 import { ROLE_LABEL } from '@/types';
@@ -69,6 +70,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const { setUser, user: appUser } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [pwToast, setPwToast] = useState('');
 
   // SSE 실시간 알림 연결
   useSse();
@@ -185,16 +188,25 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* 하단: 유저 + 로그아웃 */}
+        {/* 하단: 유저 + 비밀번호 변경 + 로그아웃 */}
         <div className="border-t border-gray-100 px-4 py-3">
           <p className="text-sm font-medium text-gray-900 truncate">{authUser.name}</p>
           <p className="text-xs text-gray-400 truncate">{authUser.loginId ?? authUser.email}</p>
-          <button
-            onClick={handleLogout}
-            className="mt-2 w-full text-left text-xs text-red-500 hover:text-red-700"
-          >
-            로그아웃
-          </button>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={() => setShowChangePassword(true)}
+              className="text-xs text-gray-500 hover:text-gray-800"
+            >
+              비밀번호 변경
+            </button>
+            <span className="text-gray-300">|</span>
+            <button
+              onClick={handleLogout}
+              className="text-xs text-red-500 hover:text-red-700"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -224,6 +236,21 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           <QuickCreateFab />
         </main>
       </div>
+
+      {/* 비밀번호 변경 모달 */}
+      <ChangePasswordModal
+        open={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onSuccess={() => {
+          setPwToast('비밀번호가 변경되었습니다');
+          setTimeout(() => setPwToast(''), 3000);
+        }}
+      />
+      {pwToast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+          {pwToast}
+        </div>
+      )}
     </div>
   );
 }
