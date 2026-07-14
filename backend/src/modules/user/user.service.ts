@@ -181,6 +181,7 @@ export async function listUsers(query: ListUsersQuery) {
       position: true,
       isActive: true,
       branchId: true,
+      branchIds: true,
       branch: { select: { id: true, name: true, code: true } },
       createdAt: true,
       updatedAt: true,
@@ -206,6 +207,7 @@ export async function getUserById(id: string) {
       position: true,
       isActive: true,
       branchId: true,
+      branchIds: true,
       branch: { select: { id: true, name: true, code: true } },
       createdAt: true,
       updatedAt: true,
@@ -232,13 +234,29 @@ export async function updateUser(id: string, dto: UpdateUserDto) {
     throw new AppError('사용자를 찾을 수 없습니다', 404, true, 'USER_NOT_FOUND');
   }
 
+  // 담당 지점 복수 배정 — branchIds 우선, 주 지점(branchId)은 배열 첫 항목으로 동기화
+  // (seed·signup과 동일한 관례: branchId = branchIds[0])
+  const effectiveBranchId =
+    dto.branchIds !== undefined
+      ? dto.branchIds[0] ?? null
+      : dto.branchId !== undefined
+      ? dto.branchId
+      : user.branchId;
+
   const newRole = dto.role ?? user.role;
   const newPosition = dto.position ?? user.position;
-  const newBranchId = dto.branchId !== undefined ? dto.branchId : user.branchId;
 
-  validateBranchAssignment(newRole, newPosition, newBranchId);
+  validateBranchAssignment(newRole, newPosition, effectiveBranchId);
 
-  if (dto.branchId) {
+  if (dto.branchIds !== undefined && dto.branchIds.length > 0) {
+    const branches = await prisma.branch.findMany({
+      where: { id: { in: dto.branchIds }, deletedAt: null },
+      select: { id: true },
+    });
+    if (branches.length !== dto.branchIds.length) {
+      throw new AppError('존재하지 않는 지점이 포함되어 있습니다', 404, true, 'BRANCH_NOT_FOUND');
+    }
+  } else if (dto.branchId) {
     const branch = await prisma.branch.findFirst({
       where: { id: dto.branchId, deletedAt: null },
     });
@@ -253,7 +271,11 @@ export async function updateUser(id: string, dto: UpdateUserDto) {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(dto.role !== undefined && { role: dto.role }),
       ...(dto.position !== undefined && { position: dto.position }),
-      ...(dto.branchId !== undefined && { branchId: dto.branchId }),
+      ...(dto.branchIds !== undefined
+        ? { branchIds: dto.branchIds, branchId: dto.branchIds[0] ?? null }
+        : dto.branchId !== undefined
+        ? { branchId: dto.branchId, branchIds: dto.branchId ? [dto.branchId] : [] }
+        : {}),
       ...(dto.isActive !== undefined && { isActive: dto.isActive }),
     },
     select: {
@@ -264,6 +286,7 @@ export async function updateUser(id: string, dto: UpdateUserDto) {
       position: true,
       isActive: true,
       branchId: true,
+      branchIds: true,
       branch: { select: { id: true, name: true, code: true } },
       createdAt: true,
       updatedAt: true,

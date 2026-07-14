@@ -177,7 +177,13 @@ export default function AdminUsersPage() {
                     <RoleBadge role={u.role} />
                   </td>
                   <td className="py-2.5 pr-4 text-gray-600">{POSITION_LABEL[u.position]}</td>
-                  <td className="py-2.5 pr-4 text-gray-600">{u.branch?.name ?? '-'}</td>
+                  <td className="py-2.5 pr-4 text-gray-600">
+                    {u.branch?.name
+                      ? (u.branchIds?.length ?? 0) > 1
+                        ? `${u.branch.name} 외 ${(u.branchIds!.length) - 1}`
+                        : u.branch.name
+                      : '-'}
+                  </td>
                   <td className="py-2.5 pr-4">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
                       u.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -412,13 +418,44 @@ function EditUserModal({
     branchId: user.branchId,
     isActive: user.isActive,
   });
+  // 담당 지점 복수 선택 (운영/QC 팀원 전용)
+  const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>(
+    user.branchIds && user.branchIds.length > 0
+      ? user.branchIds
+      : user.branchId
+      ? [user.branchId]
+      : [],
+  );
   const [err, setErr] = useState('');
+
+  const role = form.role ?? user.role;
+  const position = form.position ?? user.position;
+  // 팀원(운영/QC)은 담당 지점 복수 배정, 그 외는 기존 단일 지점 UI 유지
+  const isMultiBranchTarget =
+    (role === 'OPERATIONS' || role === 'QC') && position === 'MEMBER';
+
+  function toggleBranch(id: string) {
+    setSelectedBranchIds((prev) =>
+      prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id],
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr('');
+    if (isMultiBranchTarget && selectedBranchIds.length === 0) {
+      setErr('팀원은 담당 지점을 1개 이상 선택해야 합니다');
+      return;
+    }
     try {
-      await onUpdate(form);
+      if (isMultiBranchTarget) {
+        // 체크 순서와 무관하게 지점 목록 순서로 정렬해 전송 (첫 항목 = 주 지점)
+        const ordered = branches.filter((b) => selectedBranchIds.includes(b.id)).map((b) => b.id);
+        const { branchId: _omit, ...rest } = form;
+        await onUpdate({ ...rest, branchIds: ordered });
+      } else {
+        await onUpdate(form);
+      }
     } catch {
       setErr('수정에 실패했습니다');
     }
@@ -455,16 +492,40 @@ function EditUserModal({
             </select>
           </Field>
         </div>
-        <Field label="소속 지점">
-          <select
-            value={form.branchId ?? ''}
-            onChange={(e) => setForm({ ...form, branchId: e.target.value || null })}
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">미지정</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </Field>
+        {isMultiBranchTarget ? (
+          <Field label={`담당 지점 (${selectedBranchIds.length}곳 선택)`}>
+            <div className="border border-gray-200 rounded-lg p-2 max-h-44 overflow-y-auto grid grid-cols-2 gap-1">
+              {branches.map((b) => (
+                <label
+                  key={b.id}
+                  className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedBranchIds.includes(b.id)}
+                    onChange={() => toggleBranch(b.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">{b.name}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">
+              변경 사항은 해당 사용자가 다시 로그인하거나 최대 15분 후 자동 반영됩니다.
+            </p>
+          </Field>
+        ) : (
+          <Field label="소속 지점">
+            <select
+              value={form.branchId ?? ''}
+              onChange={(e) => setForm({ ...form, branchId: e.target.value || null })}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">미지정</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label="상태">
           <label className="flex items-center gap-2 cursor-pointer">
             <input

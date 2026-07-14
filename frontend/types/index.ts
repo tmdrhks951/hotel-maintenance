@@ -708,6 +708,8 @@ export interface AdminUser {
   position: Position;
   isActive: boolean;
   branchId: string | null;
+  /// 담당 지점 복수 배정 (팀원의 등록 가능 지점 범위)
+  branchIds?: string[];
   branch: { id: string; name: string; code: string } | null;
   createdAt: string;
   updatedAt: string;
@@ -727,6 +729,8 @@ export interface UpdateUserBody {
   role?: Role;
   position?: Position;
   branchId?: string | null;
+  /// 담당 지점 복수 배정 — 전달 시 주 지점(branchId)은 첫 항목으로 동기화됨
+  branchIds?: string[];
   isActive?: boolean;
 }
 

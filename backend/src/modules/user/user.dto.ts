@@ -18,6 +18,8 @@ export interface UpdateUserDto {
   role?: Role;
   position?: Position;
   branchId?: string | null;
+  /// 담당 지점 복수 배정 — 전달 시 branchId(주 지점)는 배열 첫 항목으로 동기화
+  branchIds?: string[];
   isActive?: boolean;
 }
 
