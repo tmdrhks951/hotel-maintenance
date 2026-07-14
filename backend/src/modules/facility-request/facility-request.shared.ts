@@ -83,13 +83,18 @@ export function assertOperationsAccess(role: string): void {
   }
 }
 
-/** QC의 지점 접근 제어 — ADMIN은 모든 지점 허용 */
+/**
+ * QC/운영의 지점 접근 제어 — ADMIN은 모든 지점 허용.
+ * 빈 branchIds = 전 지점 담당 (팀장/부팀장 등 지점 미배정 관리급).
+ * 목록 조회(query.service)의 지점 필터 규칙과 동일한 컨벤션 — 보이면 처리도 가능해야 한다.
+ */
 export function assertQcBranchAccess(
   role: string,
   userBranchIds: string[],
   requestBranchId: string,
 ): void {
   if (role === 'ADMIN') return;
+  if (userBranchIds.length === 0) return;
   if (!userBranchIds.includes(requestBranchId)) {
     throw new AppError('해당 지점 요청에 접근 권한이 없습니다', 403, true, 'FORBIDDEN');
   }
