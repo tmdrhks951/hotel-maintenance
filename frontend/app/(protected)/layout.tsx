@@ -27,6 +27,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   QC: [
     { label: 'QC 대기열', href: '/qc/queue', icon: '📋' },
     { label: 'QC 검증', href: '/qc/verify', icon: '✅' },
+    { label: '객실 체크아웃', href: '/qc/checkout', icon: '🚪' },
     { label: '작업 이력', href: '/qc/history', icon: '📜' },
     { label: '정기점검', href: '/schedules', icon: '🔄' },
     { label: '공지사항', href: '/notices', icon: '📢' },
