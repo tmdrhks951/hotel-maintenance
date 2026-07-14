@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { Role, Position } from '@prisma/client';
 import { env } from '@/config/env';
@@ -44,6 +45,9 @@ export function signRefreshToken(userId: string): string {
   const options: SignOptions = {
     subject: userId,
     expiresIn: env.JWT_REFRESH_EXPIRES_IN as SignOptions['expiresIn'],
+    // 토큰 고유 ID — 같은 사용자가 같은 초에 여러 세션을 만들어도 (공용 계정
+    // 동시 로그인/갱신) 토큰 문자열이 항상 달라 tokenHash 유니크 충돌 방지
+    jwtid: randomUUID(),
   };
 
   return jwt.sign({}, env.JWT_REFRESH_SECRET, options);
