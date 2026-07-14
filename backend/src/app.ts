@@ -13,6 +13,10 @@ import { notFoundHandler } from '@/common/middleware/notFound';
 export function createApp(): express.Application {
   const app = express();
 
+  // Railway/Vercel 등 리버스 프록시 뒤에서 실제 클라이언트 IP 인식
+  // (미설정 시 rate limiter가 모든 사용자를 프록시 IP 하나로 묶어 오차단)
+  app.set('trust proxy', 1);
+
   // 보안 헤더 (uploads 정적 파일을 위해 CSP crossOrigin 허용)
   app.use(
     helmet({
