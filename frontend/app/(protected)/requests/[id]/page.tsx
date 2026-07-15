@@ -41,9 +41,10 @@ function fmtDateShort(iso: string | null | undefined): string {
 // 역할별 홈 경로
 // ================================================================
 
+// 역할별 "목록으로" 이동 경로 — 실제 존재하는 목록 페이지로 (빈 /qc·/operations는 404)
 const HOME_BY_ROLE: Record<string, string> = {
-  QC: '/qc',
-  OPERATIONS: '/operations',
+  QC: '/qc/queue',
+  OPERATIONS: '/operations/dashboard',
   ADMIN: '/admin/dashboard',
   VENDOR: '/vendor/assignments',
 };
