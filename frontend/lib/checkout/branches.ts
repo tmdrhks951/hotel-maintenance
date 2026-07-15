@@ -78,3 +78,34 @@ export function resolveBranch(sectionHeader: string, roomNumber: string): Checko
   if (!rule) return null;
   return rule.resolve(roomNumber);
 }
+
+// ─── 총괄방 지점 코드 → 체크아웃 지점 키 매핑 ───
+// 체크아웃 데이터가 있는 지점만 존재. 나머지 지점(사당·카와우소·강남 등)은
+// 예약 시트에 없으므로 매핑 없음(= 그 지점 담당자는 체크아웃 대상이 없음).
+export const BRANCH_CODE_TO_CHECKOUT_KEY: Record<string, CheckoutBranchKey> = {
+  MYEONGDONG1: 'myeongdong-1',
+  MYEONGDONG2: 'myeongdong-2',
+  MYEONGDONG3: 'myeongdong-3',
+  JONGNO: 'jongno-1',
+  JONGNO2: 'jongno-2',
+  THESEOUL: 'seoul',
+  SQUARE: 'seoul-square',
+  CENTRAL: 'seoul-central',
+  DEOKSUGUNG: 'deoksugung',
+};
+
+/**
+ * 사용자에게 보여줄 체크아웃 지점 키 집합.
+ * branchCodes: useBranches(true) 결과의 code 목록 (백엔드가 이미 역할/담당에 맞게 필터링).
+ *   - ADMIN·팀장급: 전 지점 코드 → 체크아웃 있는 9개 지점 전부
+ *   - 팀원(매니저): 담당 지점 코드만 → 그 중 체크아웃 있는 지점만
+ * 반환이 빈 Set이면 담당 지점에 체크아웃 대상이 없는 것.
+ */
+export function allowedCheckoutKeys(branchCodes: string[]): Set<CheckoutBranchKey> {
+  const keys = new Set<CheckoutBranchKey>();
+  for (const code of branchCodes) {
+    const k = BRANCH_CODE_TO_CHECKOUT_KEY[code];
+    if (k) keys.add(k);
+  }
+  return keys;
+}

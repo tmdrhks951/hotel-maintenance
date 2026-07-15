@@ -4,15 +4,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCheckoutSheets, loadCache, saveCache } from '@/lib/checkout/gas';
 import { buildIndex, buildIndexFromReservations } from '@/lib/checkout/pipeline';
 import type { CheckoutIndex } from '@/lib/checkout/pipeline';
-import { CHECKOUT_BRANCHES, CHECKOUT_BRANCH_BY_KEY } from '@/lib/checkout/branches';
+import {
+  CHECKOUT_BRANCHES,
+  CHECKOUT_BRANCH_BY_KEY,
+  allowedCheckoutKeys,
+} from '@/lib/checkout/branches';
 import { todayKst } from '@/lib/checkout/dateParser';
 import type { Reservation, CheckoutBranchKey } from '@/lib/checkout/types';
+import { useBranches } from '@/hooks/useBranches';
 
 type Mode = 'date' | 'room';
 
 // ================================================================
-// 페이지 — 객실 체크아웃 조회
-// 데이터: 예약 관리 구글 시트 (5분 캐시 + 백그라운드 갱신)
+// 객실 체크아웃 조회 — QC·운영 공용
+// 담당 지점 필터: useBranches(백엔드가 역할/담당에 맞게 반환)의 지점 코드를
+// 체크아웃 지점 키로 변환해, 담당 지점의 체크아웃만 표시.
+//   - ADMIN·팀장급: 전 지점 / 팀원(매니저): 담당 지점만
 // ================================================================
 
 export default function CheckoutPage() {
@@ -22,19 +29,25 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const abortRef = useRef<AbortController | null>(null);
 
+  // 담당 지점 → 허용 체크아웃 키 집합 (null = 아직 로딩)
+  const { data: branches } = useBranches(true);
+  const allowed = useMemo(() => {
+    if (!branches) return null;
+    return allowedCheckoutKeys(branches.map((b) => b.code));
+  }, [branches]);
+
   async function refresh(force = false) {
-    if (loading) return;
     setError('');
 
-    // 캐시 우선 (Stale-While-Revalidate)
     if (!force) {
       const cached = loadCache();
       if (cached) {
         setIndex(buildIndexFromReservations(cached.reservations, new Date(cached.savedAt)));
-        if (!cached.isStale) return; // 신선한 캐시 → fetch 생략
+        if (!cached.isStale) return;
       }
     }
 
+    // 이전 요청이 있으면 취소하고 새 요청으로 대체 (개발모드 이중 마운트 포함)
     setLoading(true);
     abortRef.current?.abort();
     const ctl = new AbortController();
@@ -46,10 +59,16 @@ export default function CheckoutPage() {
       setIndex(idx);
     } catch (e) {
       const msg = (e as Error).message;
-      if (msg !== 'aborted') setError(`시트 데이터를 불러오지 못했습니다: ${msg}`);
+      if (msg !== 'aborted' && abortRef.current === ctl) {
+        setError(`시트 데이터를 불러오지 못했습니다: ${msg}`);
+      }
     } finally {
-      setLoading(false);
-      setProgress('');
+      // 최신 요청일 때만 로딩 해제 — 취소된 옛 요청이 진행 중인 새 요청의
+      // 로딩 표시를 꺼버리는 문제 방지
+      if (abortRef.current === ctl) {
+        setLoading(false);
+        setProgress('');
+      }
     }
   }
 
@@ -68,6 +87,9 @@ export default function CheckoutPage() {
     setRoom(r);
     setMode('room');
   }
+
+  // 담당 지점에 체크아웃 대상이 하나도 없는 매니저
+  const noCoverage = allowed !== null && allowed.size === 0;
 
   return (
     <div>
@@ -93,63 +115,70 @@ export default function CheckoutPage() {
         </button>
       </div>
 
-      {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">{error}</p>
-      )}
+      {error && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">{error}</p>}
 
-      {/* 최초 로딩 */}
-      {!index && loading && (
-        <div className="bg-white border border-gray-200 rounded-lg py-16 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p className="text-sm text-gray-600 font-medium">{progress || '시트 데이터 불러오는 중...'}</p>
-          <p className="text-xs text-gray-400 mt-1">첫 로딩은 20~40초 정도 걸립니다</p>
+      {noCoverage ? (
+        <div className="bg-white border border-gray-200 rounded-lg py-12 text-center">
+          <p className="text-sm text-gray-500">담당 지점에는 체크아웃 조회 대상 지점이 없습니다.</p>
+          <p className="text-xs text-gray-400 mt-1">
+            체크아웃 데이터는 명동·종로·더서울·덕수궁·스퀘어·센트럴 지점에 한해 제공됩니다.
+          </p>
         </div>
-      )}
-
-      {index && (
+      ) : (
         <>
-          {/* 백그라운드 갱신 표시 */}
-          {loading && (
-            <p className="text-xs text-blue-600 bg-blue-50 rounded px-3 py-1.5 mb-3">
-              {progress || '최신 데이터로 갱신 중...'} (기존 데이터는 계속 사용 가능)
-            </p>
+          {!index && loading && (
+            <div className="bg-white border border-gray-200 rounded-lg py-16 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
+              <p className="text-sm text-gray-600 font-medium">{progress || '시트 데이터 불러오는 중...'}</p>
+              <p className="text-xs text-gray-400 mt-1">첫 로딩은 20~40초 정도 걸립니다</p>
+            </div>
           )}
 
-          {/* 모드 토글 */}
-          <div className="flex gap-2 mb-4">
-            {(
-              [
-                { key: 'date', label: '📅 날짜별' },
-                { key: 'room', label: '🚪 호실별' },
-              ] as { key: Mode; label: string }[]
-            ).map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setMode(t.key)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  mode === t.key
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {index && (
+            <>
+              {loading && (
+                <p className="text-xs text-blue-600 bg-blue-50 rounded px-3 py-1.5 mb-3">
+                  {progress || '최신 데이터로 갱신 중...'} (기존 데이터는 계속 사용 가능)
+                </p>
+              )}
 
-          {mode === 'date' ? (
-            <DateMode index={index} onSelectRoom={goToRoom} />
-          ) : (
-            <RoomMode
-              index={index}
-              branchKey={branchKey}
-              room={room}
-              onBranchChange={(k) => {
-                setBranchKey(k);
-                setRoom('');
-              }}
-              onRoomChange={setRoom}
-            />
+              <div className="flex gap-2 mb-4">
+                {(
+                  [
+                    { key: 'date', label: '📅 날짜별' },
+                    { key: 'room', label: '🚪 호실별' },
+                  ] as { key: Mode; label: string }[]
+                ).map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setMode(t.key)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      mode === t.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {mode === 'date' ? (
+                <DateMode index={index} allowed={allowed} onSelectRoom={goToRoom} />
+              ) : (
+                <RoomMode
+                  index={index}
+                  allowed={allowed}
+                  branchKey={branchKey}
+                  room={room}
+                  onBranchChange={(k) => {
+                    setBranchKey(k);
+                    setRoom('');
+                  }}
+                  onRoomChange={setRoom}
+                />
+              )}
+            </>
           )}
         </>
       )}
@@ -157,16 +186,24 @@ export default function CheckoutPage() {
   );
 }
 
+// allowed가 null이면 전체 허용, Set이면 그 키만 허용
+function isAllowed(allowed: Set<CheckoutBranchKey> | null, key: string): boolean {
+  return allowed === null || allowed.has(key as CheckoutBranchKey);
+}
+
 // ─── 날짜별 모드 ───────────────────────────────
 function DateMode({
   index,
+  allowed,
   onSelectRoom,
 }: {
   index: CheckoutIndex;
+  allowed: Set<CheckoutBranchKey> | null;
   onSelectRoom: (branchKey: string, room: string) => void;
 }) {
   const [date, setDate] = useState(todayKst());
-  const list = index.reservationsByCheckOut.get(date) ?? [];
+  const rawList = index.reservationsByCheckOut.get(date) ?? [];
+  const list = rawList.filter((r) => isAllowed(allowed, r.branchKey));
 
   const main = list.filter((r) => r.cellKind === 'PRICE');
   const special = list.filter((r) => r.cellKind !== 'PRICE');
@@ -183,7 +220,6 @@ function DateMode({
 
   return (
     <div>
-      {/* 날짜 선택 */}
       <div className="bg-white rounded-lg border border-gray-200 p-3 mb-4 flex items-center gap-2">
         <input
           type="date"
@@ -199,7 +235,6 @@ function DateMode({
         </button>
       </div>
 
-      {/* 요약 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm font-medium text-gray-900">
         📅 {formatDate(date)} — 체크아웃 <span className="text-blue-700 font-bold">{main.length}개</span>
         {special.length > 0 && (
@@ -217,7 +252,6 @@ function DateMode({
         </div>
       )}
 
-      {/* 지점별 그룹 */}
       {Array.from(byBranch.entries()).map(([bKey, rs]) => {
         const b = CHECKOUT_BRANCH_BY_KEY[bKey as CheckoutBranchKey];
         if (!b) return null;
@@ -237,7 +271,6 @@ function DateMode({
         );
       })}
 
-      {/* 특수 셀 */}
       {special.length > 0 && (
         <div className="bg-white rounded-lg border border-amber-300 overflow-hidden">
           <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-sm font-semibold text-amber-800">
@@ -285,12 +318,14 @@ function RoomChip({ r, onClick }: { r: Reservation; onClick?: () => void }) {
 // ─── 호실별 모드 ───────────────────────────────
 function RoomMode({
   index,
+  allowed,
   branchKey,
   room,
   onBranchChange,
   onRoomChange,
 }: {
   index: CheckoutIndex;
+  allowed: Set<CheckoutBranchKey> | null;
   branchKey: string;
   room: string;
   onBranchChange: (k: string) => void;
@@ -306,7 +341,9 @@ function RoomMode({
     return m;
   }, [index]);
 
-  const availableBranches = CHECKOUT_BRANCHES.filter((b) => b.hasCheckout && roomsByBranch.has(b.key));
+  const availableBranches = CHECKOUT_BRANCHES.filter(
+    (b) => b.hasCheckout && roomsByBranch.has(b.key) && isAllowed(allowed, b.key),
+  );
   const rooms = branchKey ? Array.from(roomsByBranch.get(branchKey) ?? []).sort() : [];
 
   const allList =
