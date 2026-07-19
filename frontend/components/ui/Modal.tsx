@@ -23,19 +23,28 @@ export default function Modal({ open, onClose, title, children, wide }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* 배경 */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      {/* 배경 — 흐림 + 어둡게 (초점 유도) */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm animate-fade-in" onClick={onClose} />
 
-      {/* 모달 카드 */}
-      <div className={`relative bg-white rounded-lg shadow-xl w-full ${wide ? 'max-w-lg' : 'max-w-md'} max-h-[90vh] flex flex-col`}>
+      {/* 모달 카드 — 재질이 도착하는 등장 */}
+      <div
+        className={`relative bg-white rounded-2xl shadow-xl w-full ${wide ? 'max-w-lg' : 'max-w-md'} max-h-[90vh] flex flex-col animate-modal-pop`}
+        style={{ transformOrigin: 'center' }}
+      >
         {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h3 className="text-base font-bold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4">
+          <h3 className="text-[17px] font-semibold text-gray-900 tracking-tight">{title}</h3>
+          <button
+            onClick={onClose}
+            className="-mr-1.5 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-black/[0.05] text-xl leading-none"
+            aria-label="닫기"
+          >
+            &times;
+          </button>
         </div>
 
         {/* 컨텐츠 */}
-        <div className="px-5 py-4 overflow-y-auto flex-1">
+        <div className="px-6 pb-6 overflow-y-auto flex-1">
           {children}
         </div>
       </div>

@@ -147,28 +147,29 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       {/* 모바일 오버레이 */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/30 z-30 lg:hidden"
+          className="fixed inset-0 bg-black/25 backdrop-blur-sm z-30 lg:hidden animate-fade-in"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* 사이드바 */}
+      {/* 사이드바 — 반투명 재질 */}
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-full w-60 bg-white border-r border-gray-200 flex flex-col
-          transition-transform duration-200
+          fixed top-0 left-0 z-40 h-full w-64 flex flex-col
+          bg-white/80 backdrop-blur-xl border-r border-black/5
+          transition-transform duration-300 ease-out
           lg:translate-x-0 lg:static lg:z-auto
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          ${sidebarOpen ? 'translate-x-0 shadow-xl lg:shadow-none' : '-translate-x-full'}
         `}
       >
         {/* 로고 */}
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-900">시설관리 시스템</h2>
+        <div className="px-5 pt-5 pb-4">
+          <h2 className="text-[15px] font-semibold text-gray-900 tracking-tight">시설관리 시스템</h2>
           <p className="text-xs text-gray-400 mt-0.5">{ROLE_LABEL[authUser.role]}</p>
         </div>
 
         {/* 네비게이션 */}
-        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto py-2 px-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             return (
@@ -177,13 +178,15 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                 href={item.href}
                 onClick={() => setSidebarOpen(false)}
                 className={`
-                  flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors
+                  group flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all duration-200
                   ${isActive
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                    ? 'bg-blue-600 text-white font-medium shadow-sm'
+                    : 'text-gray-600 hover:bg-black/[0.04] hover:text-gray-900'}
                 `}
               >
-                <span className="text-base">{item.icon}</span>
+                <span className={`text-base transition-transform duration-200 ${isActive ? '' : 'group-hover:scale-110'}`}>
+                  {item.icon}
+                </span>
                 {item.label}
               </Link>
             );
@@ -191,20 +194,20 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* 하단: 유저 + 비밀번호 변경 + 로그아웃 */}
-        <div className="border-t border-gray-100 px-4 py-3">
+        <div className="border-t border-black/5 px-4 py-3.5">
           <p className="text-sm font-medium text-gray-900 truncate">{authUser.name}</p>
           <p className="text-xs text-gray-400 truncate">{authUser.loginId ?? authUser.email}</p>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2.5 flex items-center gap-2.5">
             <button
               onClick={() => setShowChangePassword(true)}
-              className="text-xs text-gray-500 hover:text-gray-800"
+              className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
             >
               비밀번호 변경
             </button>
-            <span className="text-gray-300">|</span>
+            <span className="text-gray-200">·</span>
             <button
               onClick={handleLogout}
-              className="text-xs text-red-500 hover:text-red-700"
+              className="text-xs text-red-500 hover:text-red-600 transition-colors"
             >
               로그아웃
             </button>
@@ -214,14 +217,14 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
       {/* 메인 영역 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 헤더 */}
-        <header className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 lg:px-6">
+        {/* 헤더 — 반투명, 아래 콘텐츠가 비쳐 흐름 */}
+        <header className="sticky top-0 z-20 bg-gray-50/70 backdrop-blur-xl px-4 h-14 flex items-center gap-3 lg:px-6 border-b border-black/[0.06]">
           {/* 모바일 햄버거 */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-1 text-gray-500 hover:text-gray-700"
+            className="lg:hidden -ml-1 p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-black/[0.04]"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5.5 h-5.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
@@ -233,8 +236,10 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* 페이지 컨텐츠 */}
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-          {children}
+        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
+          <div className="mx-auto max-w-6xl">
+            {children}
+          </div>
           <QuickCreateFab />
         </main>
       </div>
@@ -249,7 +254,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
         }}
       />
       {pwToast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-gray-900/90 backdrop-blur-md text-white text-sm px-4 py-2.5 rounded-full shadow-lg animate-modal-pop">
           {pwToast}
         </div>
       )}

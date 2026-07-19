@@ -109,10 +109,10 @@ export default function QuickCreateFab() {
       <button
         onClick={() => setOpen(!open)}
         aria-label="빠른 메뉴"
-        className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+        className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 ease-out focus:outline-none ${
           open
-            ? 'bg-gray-600 text-white rotate-45 focus:ring-gray-500'
-            : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+            ? 'bg-gray-800 text-white rotate-45'
+            : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-xl hover:-translate-y-0.5'
         }`}
       >
         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">

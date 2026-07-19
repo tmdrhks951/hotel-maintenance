@@ -21,7 +21,7 @@ const COLOR_MAP: Record<FacilityRequestStatus, string> = {
 
 export default function StatusBadge({ status }: { status: FacilityRequestStatus }) {
   return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${COLOR_MAP[status] ?? 'bg-gray-100 text-gray-600'}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ring-1 ring-inset ring-black/[0.04] ${COLOR_MAP[status] ?? 'bg-gray-100 text-gray-600'}`}>
       {REQUEST_STATUS_LABEL[status] ?? status}
     </span>
   );

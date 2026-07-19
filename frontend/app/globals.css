@@ -2,11 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
-/* [PATCH] 답변이 달린 카드 하이라이트 — 원래 테두리/배경은 유지, 뒤쪽에서 노란 빛만 새어나오는 펄스 */
+/* ================================================================
+   Apple 스타일 전역 기반
+   - 시스템 폰트 + 안티앨리어싱, 큰 글자는 음수 자간
+   - 버튼은 눌리는 순간 즉시 반응 (pointer-down 피드백)
+   - 접근성: 포커스 링, 모션 감소 설정 존중
+   ================================================================ */
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+
+  /* 큰 제목일수록 자간을 조임 (optical tracking) */
+  h1 { letter-spacing: -0.022em; }
+  h2 { letter-spacing: -0.017em; }
+  h3 { letter-spacing: -0.012em; }
+
+  ::selection {
+    background: rgba(0, 113, 227, 0.18);
+  }
+
+  /* 키보드 포커스 링 — 마우스 클릭에는 뜨지 않음 */
+  :focus-visible {
+    outline: 2px solid rgba(0, 113, 227, 0.55);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* 얇고 조용한 스크롤바 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 8px;
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.28); }
+  *::-webkit-scrollbar-track { background: transparent; }
+}
+
+@layer components {
+  /* 버튼 프레스 피드백 — 누르는 즉시 살짝 가라앉음 */
+  button {
+    transition-property: transform, background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  button:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* 카드/행 호버의 기본 톤 통일 */
+  input, select, textarea {
+    transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+  }
+}
+
+/* [PATCH] 답변이 달린 카드 하이라이트 — 뒤쪽에서 노란 빛이 새어나오는 펄스 */
 @keyframes answer-glow {
-  0%, 100% { box-shadow: 0 0 10px 3px rgba(234, 179, 8, 0.45); }
-  50% { box-shadow: 0 0 22px 7px rgba(234, 179, 8, 0.70); }
+  0%, 100% { box-shadow: 0 0 10px 3px rgba(234, 179, 8, 0.35); }
+  50% { box-shadow: 0 0 22px 7px rgba(234, 179, 8, 0.55); }
 }
 .card-answer-glow {
   animation: answer-glow 2s ease-in-out infinite;
+}
+
+/* 모달 등장 — 재질이 도착하는 느낌 (스케일 + 페이드) */
+@keyframes modal-pop {
+  from { opacity: 0; transform: scale(0.965) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-modal-pop {
+  animation: modal-pop 220ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.animate-fade-in {
+  animation: fade-in 180ms ease-out both;
+}
+
+/* 리스트 항목 순차 등장용 (선택 사용) */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-rise-in {
+  animation: rise-in 320ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* 모션 감소 설정 — 이동/스케일 대신 짧은 페이드로 대체 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  button:active:not(:disabled) { transform: none; }
+  .card-answer-glow { animation: none; box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.4); }
 }
