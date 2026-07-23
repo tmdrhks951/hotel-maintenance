@@ -74,7 +74,14 @@ export function parseDate(s: string | null | undefined, defaultYear = 2026): str
 /** "M/D-M/D" 또는 "M/D ~ M/D" 같은 범위 → [start, end] */
 export function parseRange(s: string, defaultYear = 2026): [string, string] | null {
   if (!s) return null;
-  const parts = s.split(/\s*[-~∼–至]\s*/);
+  // ISO 날짜(YYYY-MM-DD)는 하이픈을 쓰므로, 먼저 "공백이 있는 하이픈"과
+  // 물결/엔대시/至는 구분자로 분리 → 날짜 내부 하이픈은 건드리지 않는다.
+  //   예) "2026-07-12 - 2026-07-19" → ["2026-07-12", "2026-07-19"]
+  let parts = s.split(/\s*[~∼–至]\s*|\s+-\s+/);
+  if (parts.length !== 2) {
+    // 폴백: 하이픈 없는 날짜(YY/MM/DD·M/D 등)를 위한 단순 하이픈 분리
+    parts = s.split(/\s*-\s*/);
+  }
   if (parts.length !== 2) return null;
   const a = parseDate(parts[0], defaultYear);
   const b = parseDate(parts[1], defaultYear);

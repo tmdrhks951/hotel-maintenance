@@ -7,7 +7,10 @@ const P_BOOKID = /(?:예약\s*번호|예약\s*ID|Booking\s*ID|Booking\s*number)\
 const P_CHECKIN = /(?:Check\s*-?\s*in|체크인|입실|도착)\s*[:：]?\s*([^\n]+)/i;
 const P_CHECKOUT = /(?:Check\s*-?\s*out|체크아웃|퇴실|출발)\s*[:：]?\s*([^\n]+)/i;
 const P_STAY = /(?:투숙\s*기간|숙박\s*기간|Stay\s*dates?)\s*[:：]?\s*([^\n]+)/i;
+// "박수 : 3" 형태 (콜론 뒤 바로 숫자)
 const P_NIGHTS_LABEL = /박수\s*[:：]\s*(\d{1,2})/;
+// "국적 및 박수 : 미국 8박" 처럼 박수 라벨 뒤 같은 줄의 N박 (앞줄의 "1박 수정" 등 오염 방지)
+const P_NIGHTS_LABELED_SEG = /박수\s*[:：][^\n]*?(\d{1,2})\s*박/;
 const P_NIGHTS_INLINE = /(\d{1,2})\s*박|\b(\d{1,2})\s*nights?\b/i;
 const P_CONTACT = /(?:연락처|Contact(?:\s*details)?|Phone)\s*[:：]?\s*([^\n]+)/i;
 const P_NATION = /(?:국적(?:\s*및\s*박수)?|residency|Nationality)\s*[:：]?\s*([^\n]+)/i;
@@ -50,7 +53,12 @@ export function parseReservationMemo(memo: string, defaultYear = 2026): ParsedMe
   m = memo.match(P_NATION); if (m) out.nationality = m[1].trim();
   m = memo.match(P_CLEAN); if (m) out.cleanAll = +m[1];
 
+  // 박수: ① "박수 : 3" ② "박수 : 미국 8박"(라벨 세그먼트) ③ 아무 "N박"(최후 수단)
   m = memo.match(P_NIGHTS_LABEL); if (m) out.nights = +m[1];
+  if (out.nights === undefined) {
+    m = memo.match(P_NIGHTS_LABELED_SEG);
+    if (m) out.nights = +m[1];
+  }
   if (out.nights === undefined) {
     m = memo.match(P_NIGHTS_INLINE);
     if (m) out.nights = +(m[1] || m[2]);

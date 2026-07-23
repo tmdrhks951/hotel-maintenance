@@ -136,7 +136,9 @@ export async function fetchCheckoutSheets(
 //   - 새로고침 버튼: 강제 fetch
 
 const CACHE_KEY = 'hm-checkout-cache-v1';
-const CACHE_VERSION = 1;
+// v2: 체크아웃 물리적 제약 보정(다음 예약·VAC 캡) 도입
+// v3: ISO 날짜 투숙기간 파싱 수정 + 박수 라벨 우선 파싱 — 이전 캐시 무효화
+const CACHE_VERSION = 3;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 export type CachedCheckout = {

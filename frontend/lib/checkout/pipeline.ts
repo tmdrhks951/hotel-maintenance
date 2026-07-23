@@ -76,22 +76,45 @@ function classifyCellKind(val: unknown): 'EMPTY' | 'PRICE' | 'OOO' | 'SPECIAL' |
 }
 
 // ─── 체크아웃 시트 → Reservation[] ─────────────
+// 물리적 제약 보정: 한 방에 두 손님이 겹칠 수 없다.
+//   체크아웃 ≤ min(다음 예약 체크인일, 첫 VAC(공실) 날짜)
+// → 조기 퇴실(직원이 VAC 표시)·일정 변경(다음 예약과 모순) 케이스를 잡아낸다.
 function extractReservations(sheet: RawSheet): Reservation[] {
   const layout = detectLayout(sheet);
   const out: Reservation[] = [];
 
   for (const room of layout.rooms) {
+    const branch = resolveBranch(room.section, room.number);
+    if (!branch) continue;
+
+    // 1) 이 방의 점유 셀과 VAC(공실) 날짜를 시간순으로 수집
+    type OccupiedCell = { cellDate: string; kind: 'PRICE' | 'OOO' | 'SPECIAL'; v: string | number; memo: string };
+    const occupied: OccupiedCell[] = [];
+    const vacDates: string[] = [];
+
     for (const [col, cellDate] of layout.dateCols) {
       const v = sheet.values[room.row]?.[col];
       const kind = classifyCellKind(v);
-      if (kind === 'EMPTY' || kind === 'VAC') continue;
-      const memo = sheet.notes[room.row]?.[col] ?? '';
-      const branch = resolveBranch(room.section, room.number);
-      if (!branch) continue;
+      if (kind === 'EMPTY') continue;
+      if (kind === 'VAC') {
+        vacDates.push(cellDate);
+        continue;
+      }
+      occupied.push({
+        cellDate,
+        kind: kind === 'PRICE' ? 'PRICE' : kind === 'OOO' ? 'OOO' : 'SPECIAL',
+        v: typeof v === 'number' ? v : String(v),
+        memo: sheet.notes[room.row]?.[col] ?? '',
+      });
+    }
+    occupied.sort((a, b) => a.cellDate.localeCompare(b.cellDate));
+    vacDates.sort();
 
-      const parsed = parseReservationMemo(memo, 2026);
+    // 2) 예약별 체크아웃 추론 + 물리적 제약 보정
+    occupied.forEach((cell, i) => {
+      const parsed = parseReservationMemo(cell.memo, 2026);
 
-      const checkIn = parsed.memoCheckIn ?? cellDate;
+      const checkIn = parsed.memoCheckIn ?? cell.cellDate;
       let checkOut: string | null = null;
       let confidence: 'high' | 'medium' | 'low' = 'low';
       const warnings: string[] = [];
@@ -100,8 +123,8 @@ function extractReservations(sheet: RawSheet): Reservation[] {
         checkOut = parsed.memoCheckOut;
         confidence = 'medium';
       }
-      if (parsed.nights && cellDate) {
-        const inferred = addDays(cellDate, parsed.nights);
+      if (parsed.nights && cell.cellDate) {
+        const inferred = addDays(cell.cellDate, parsed.nights);
         if (checkOut) {
           const d = diffDays(checkOut, inferred);
           if (Math.abs(d) <= 1) confidence = 'high';
@@ -114,6 +137,28 @@ function extractReservations(sheet: RawSheet): Reservation[] {
           confidence = 'medium';
         }
       }
+
+      // ── 물리적 제약 보정 ──
+      const nextOccupied = occupied[i + 1]?.cellDate ?? null;
+      const firstVac = vacDates.find((d) => d > cell.cellDate) ?? null;
+      let bound: string | null = null;
+      if (nextOccupied && firstVac) bound = nextOccupied < firstVac ? nextOccupied : firstVac;
+      else bound = nextOccupied ?? firstVac;
+
+      if (bound && bound > checkIn) {
+        if (!checkOut) {
+          // 박수/메모로 추출 실패 → 다음 예약·공실 기준으로 추정
+          checkOut = bound;
+          confidence = 'medium';
+          warnings.push('다음 예약·공실(VAC) 기준 추정');
+        } else if (bound < checkOut) {
+          // 조기 퇴실 / 일정 변경 감지
+          checkOut = bound;
+          if (confidence === 'low') confidence = 'medium';
+          warnings.push('일정 변경·조기 퇴실 감지 — 다음 예약·공실(VAC) 기준으로 조정');
+        }
+      }
+
       if (!checkOut) {
         warnings.push('체크아웃 추출 실패 — 직접 확인 필요');
       }
@@ -121,9 +166,9 @@ function extractReservations(sheet: RawSheet): Reservation[] {
       out.push({
         branchKey: branch,
         roomNumber: room.number,
-        cellDate,
-        cellKind: kind === 'PRICE' ? 'PRICE' : kind === 'OOO' ? 'OOO' : 'SPECIAL',
-        cellRaw: typeof v === 'number' ? v : String(v),
+        cellDate: cell.cellDate,
+        cellKind: cell.kind,
+        cellRaw: cell.v,
         parsed: {
           name: parsed.name,
           bookingId: parsed.bookingId,
@@ -135,9 +180,9 @@ function extractReservations(sheet: RawSheet): Reservation[] {
           cleanAll: parsed.cleanAll,
         },
         resolved: { checkIn, checkOut, confidence, warnings },
-        rawMemo: memo,
+        rawMemo: cell.memo,
       });
-    }
+    });
   }
 
   return out;
